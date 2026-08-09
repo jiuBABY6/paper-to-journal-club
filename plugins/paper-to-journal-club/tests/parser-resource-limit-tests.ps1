@@ -398,8 +398,28 @@ function Test-BoundedProcessRunnerWithoutDotNet {
       1. 子进程交替写 stdout/stderr 且超过捕获上限时，读取器仍能并发排空而不死锁；
       2. 子进程一直运行时，硬超时会终止进程而不是无限等待。
     #>
-    $powershellPath = Join-Path $PSHOME 'powershell.exe'
-    Assert-Condition (Test-Path -LiteralPath $powershellPath -PathType Leaf) 'Windows PowerShell executable is required for process-runner regression tests.'
+    # GitHub Actions 的 shell: pwsh 使用 PowerShell 7，其 $PSHOME 中只有 pwsh.exe；
+    # 本地 Windows PowerShell 5.1 则通常只有 powershell.exe。优先复用当前宿主，
+    # 再从 PATH 回退查找，确保同一回归可覆盖两类受支持环境。
+    $hostExecutableName = if ($PSVersionTable.PSEdition -eq 'Core') { 'pwsh.exe' } else { 'powershell.exe' }
+    $powershellCandidates = [Collections.Generic.List[string]]::new()
+    foreach ($candidate in @(
+        (Join-Path $PSHOME $hostExecutableName),
+        (Join-Path $PSHOME 'pwsh.exe'),
+        (Join-Path $PSHOME 'powershell.exe')
+    )) {
+        if (-not [string]::IsNullOrWhiteSpace($candidate)) {
+            $powershellCandidates.Add($candidate)
+        }
+    }
+    foreach ($commandName in @('pwsh.exe', 'powershell.exe', 'pwsh', 'powershell')) {
+        $command = Get-Command $commandName -ErrorAction SilentlyContinue
+        if ($null -ne $command -and -not [string]::IsNullOrWhiteSpace([string]$command.Source)) {
+            $powershellCandidates.Add([string]$command.Source)
+        }
+    }
+    $powershellPath = @($powershellCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1)[0]
+    Assert-Condition (-not [string]::IsNullOrWhiteSpace($powershellPath)) 'A PowerShell executable is required for process-runner regression tests.'
 
     $largeOutputCommand = @'
 $chunk = [string]::new([char]120, 8192)
