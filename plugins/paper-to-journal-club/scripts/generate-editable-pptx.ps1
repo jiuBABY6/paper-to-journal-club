@@ -7,7 +7,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$DeckSpecPath,
     [Parameter(Mandatory = $true)][string]$OutputPath,
-    [string]$KeepOpen = "False",
+    [switch]$KeepOpen,
     [string]$PreviewDirectory = "",
     [switch]$SkipPreviewExport,
     [switch]$Foreground,
@@ -18,6 +18,10 @@ param(
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 . (Join-Path $PSScriptRoot 'powerpoint-quality.ps1')
+$MaximumDeckSpecBytes = 2MB
+$MaximumDeckSlides = 30
+$MaximumTextCharactersPerSlide = 8000
+$MaximumBulletsPerSlide = 12
 
 function Convert-HexToOfficeRgb {
     param([string]$Hex)
@@ -87,9 +91,9 @@ function Add-InfoCard {
 }
 
 function Add-AtomicFigureImage {
-    param($Slide, [string]$Name, [string]$ImagePath, [int]$Primary)
-    if (-not (Test-Path -LiteralPath $ImagePath -PathType Leaf)) { throw "Suggested figure image was not found: $ImagePath" }
-    $image = $Slide.Shapes.AddPicture([IO.Path]::GetFullPath($ImagePath), $false, $true, 510, 135, -1, -1)
+    param($Slide, [string]$Name, [string]$ImagePath, [string]$AssetDirectory, [int]$Primary)
+    $validatedImage = Get-PaperToJournalClubApprovedRasterImage -ImagePath $ImagePath -AllowedRoots @($AssetDirectory) -ParameterName 'suggested figure image'
+    $image = $Slide.Shapes.AddPicture($validatedImage.path, $false, $true, 510, 135, -1, -1)
     $image.Name = $Name
     $image.LockAspectRatio = -1
     $maxWidth = 405
@@ -105,12 +109,61 @@ function Add-AtomicFigureImage {
     return $image
 }
 
-if (-not (Test-Path -LiteralPath $DeckSpecPath)) { throw "Deck spec was not found: $DeckSpecPath" }
+function Get-GeneratorDeckAssetDirectory {
+    param($Deck)
+    $assetDirectory = $null
+    try { $assetDirectory = [string]$Deck.evidence_pack.extraction.asset_directory } catch { $assetDirectory = $null }
+    if ([string]::IsNullOrWhiteSpace($assetDirectory)) { return $null }
+    return Assert-PaperToJournalClubAllowedPath -Path $assetDirectory -AllowedRoots @((Get-PaperToJournalClubTemporaryRoot)) -ParameterName 'deck_spec evidence asset directory'
+}
+
+function Assert-GeneratorDeckLimits {
+    param($Deck, $Slides)
+    if ($null -eq $Deck -or $null -eq $Slides) { throw 'Deck spec must contain slides.' }
+    $slideItems = @($Slides | ForEach-Object { $_ })
+    if ($slideItems.Count -lt 1 -or $slideItems.Count -gt $MaximumDeckSlides) { throw "Deck spec must contain between 1 and $MaximumDeckSlides slides." }
+    foreach ($slide in $slideItems) {
+        foreach ($propertyName in @('title', 'takeaway', 'subtitle', 'source_text', 'suggested_image_path', 'figure_label', 'evidence_label')) {
+            $value = $slide.PSObject.Properties[$propertyName]
+            if ($null -ne $value -and ($value.Value -isnot [string] -or $value.Value.Length -gt $MaximumTextCharactersPerSlide)) {
+                throw "Deck spec slide $propertyName must be a string no longer than $MaximumTextCharactersPerSlide characters."
+            }
+        }
+        $bulletProperty = $slide.PSObject.Properties['bullets']
+        if ($null -ne $bulletProperty -and $null -ne $bulletProperty.Value) {
+            $bullets = if ($bulletProperty.Value -is [string]) { @($bulletProperty.Value) } else { @($bulletProperty.Value | ForEach-Object { $_ }) }
+            if ($bullets.Count -gt $MaximumBulletsPerSlide) { throw "Deck spec slide bullets may contain at most $MaximumBulletsPerSlide items." }
+            foreach ($bullet in $bullets) {
+                if ($bullet -isnot [string] -or $bullet.Length -gt $MaximumTextCharactersPerSlide) { throw 'Deck spec slide bullet exceeds the text safety limit.' }
+            }
+        }
+    }
+}
+
+function Resolve-GeneratorPreviewDirectory {
+    param([string]$RequestedDirectory, [string]$OutputFullPath)
+    $directory = if ([string]::IsNullOrWhiteSpace($RequestedDirectory)) { "$OutputFullPath.previews" } else { $RequestedDirectory }
+    $safeDirectory = Assert-PaperToJournalClubAllowedPath -Path $directory -AllowedRoots (Get-PaperToJournalClubApprovedWriteRoots) -ParameterName 'PreviewDirectory'
+    if (Test-Path -LiteralPath $safeDirectory) {
+        if ($null -ne (Get-ChildItem -LiteralPath $safeDirectory -Force | Select-Object -First 1)) {
+            throw "PreviewDirectory must be a new or empty directory: $safeDirectory"
+        }
+    }
+    return $safeDirectory
+}
+
+ $pluginRoot = Split-Path -Parent $PSScriptRoot
+ $deckReadRoots = @((Get-PaperToJournalClubApprovedWriteRoots) + (Join-Path $pluginRoot 'examples'))
+ $deckSpecFullPath = Assert-PaperToJournalClubAllowedPath -Path $DeckSpecPath -AllowedRoots $deckReadRoots -ParameterName 'DeckSpecPath'
+if ([IO.Path]::GetExtension($deckSpecFullPath).ToLowerInvariant() -ne '.json') { throw 'DeckSpecPath must end with .json.' }
+if (-not (Test-Path -LiteralPath $deckSpecFullPath -PathType Leaf)) { throw "Deck spec was not found: $deckSpecFullPath" }
+if ((Get-Item -LiteralPath $deckSpecFullPath -Force).Length -gt $MaximumDeckSpecBytes) { throw "Deck spec exceeds the $MaximumDeckSpecBytes-byte safety limit." }
 # PowerShell 5.1 must be told the JSON encoding explicitly.
-$deck = Get-Content -Raw -Encoding UTF8 -LiteralPath $DeckSpecPath | ConvertFrom-Json
-$slideSpecs = @($deck.slides)
+$deck = Get-Content -Raw -Encoding UTF8 -LiteralPath $deckSpecFullPath | ConvertFrom-Json
+$slideSpecs = @($deck.slides | ForEach-Object { $_ })
 $slideTotal = $slideSpecs.Count
-if ($slideTotal -lt 1) { throw "Deck spec must contain at least one slide." }
+Assert-GeneratorDeckLimits -Deck $deck -Slides $slideSpecs
+$assetDirectory = Get-GeneratorDeckAssetDirectory $deck
 $isChinese = ([string]$deck.language) -match '^(?i:zh)(-|$)'
 $labels = if ($isChinese) {
     [pscustomobject]@{
@@ -131,7 +184,7 @@ $labels = if ($isChinese) {
         evidence_placeholder = 'add source page or figure number before presenting.'
     }
 }
-$outputFull = [IO.Path]::GetFullPath($OutputPath)
+$outputFull = Assert-PaperToJournalClubAllowedPath -Path $OutputPath -AllowedRoots (Get-PaperToJournalClubApprovedWriteRoots) -ParameterName 'OutputPath'
 if ([IO.Path]::GetExtension($outputFull).ToLowerInvariant() -ne '.pptx') { throw 'OutputPath must end with .pptx.' }
 $outputDirectory = Split-Path -Parent $outputFull
 New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
@@ -155,6 +208,8 @@ $presentation = $null
 
 try {
     $ppt = New-Object -ComObject PowerPoint.Application
+    # 创建新演示文稿前同样强制禁用 Office 自动化宏，避免将来流程中意外打开外部内容时降级。
+    Set-PaperToJournalClubOfficeAutomationSecurity -Application $ppt -OfficeApplication 'Microsoft PowerPoint' -DisplayAlertsValue 1
     $ppt.Visible = -1
     if (-not $Foreground) {
         try { $ppt.WindowState = 2 } catch { }
@@ -194,8 +249,10 @@ try {
             Add-EditableText -Slide $slide -Name "slide-$index-bullets" -Text $bulletText -Left 55 -Top 305 -Width 395 -Height 170 -FontSize 16 -Color $primary | Out-Null
 
             $imagePath = [string]$slideSpec.suggested_image_path
-            if (-not [string]::IsNullOrWhiteSpace($imagePath) -and (Test-Path -LiteralPath $imagePath -PathType Leaf)) {
-                Add-AtomicFigureImage -Slide $slide -Name "slide-$index-figure-image" -ImagePath $imagePath -Primary $primary | Out-Null
+            $hasApprovedImage = -not [string]::IsNullOrWhiteSpace($imagePath)
+            if ($hasApprovedImage) {
+                if ([string]::IsNullOrWhiteSpace($assetDirectory)) { throw 'Deck spec image paths require a plugin-extracted temporary asset directory.' }
+                Add-AtomicFigureImage -Slide $slide -Name "slide-$index-figure-image" -ImagePath $imagePath -AssetDirectory $assetDirectory -Primary $primary | Out-Null
                 $figureLabel = if ($slideSpec.figure_label) { [string]$slideSpec.figure_label } else { "$($labels.figure_prefix): $($slideSpec.suggested_figure_id)" }
                 Add-EditableText -Slide $slide -Name "slide-$index-figure-label" -Text $figureLabel -Left 512 -Top 372 -Width 390 -Height 20 -FontSize 11 -Color $primary | Out-Null
             } else {
@@ -206,7 +263,7 @@ try {
             }
             $sourceText = if (@($slideSpec.source_claim_ids).Count) { "$($labels.evidence_prefix): $($slideSpec.source_claim_ids -join ', ')" } else { "$($labels.evidence_prefix): $($labels.evidence_placeholder)" }
             if ($slideSpec.source_text) { $sourceText = [string]$slideSpec.source_text }
-            $sourceTop = if (-not [string]::IsNullOrWhiteSpace($imagePath) -and (Test-Path -LiteralPath $imagePath -PathType Leaf)) { 400 } else { 285 }
+            $sourceTop = if ($hasApprovedImage) { 400 } else { 285 }
             Add-EditableText -Slide $slide -Name "slide-$index-source" -Text $sourceText -Left 512 -Top $sourceTop -Width 390 -Height 50 -FontSize 12 -Color $primary | Out-Null
         }
         Add-EditableText -Slide $slide -Name "slide-$index-footer" -Text "$($deck.paper.title) | $index / $slideTotal" -Left 48 -Top 503 -Width 860 -Height 18 -FontSize 9 -Color $primary | Out-Null
@@ -214,15 +271,15 @@ try {
     # ppSaveAsOpenXMLPresentation = 24; output remains editable in PowerPoint.
     $presentation.SaveAs($outputFull, 24)
     if (-not (Test-Path -LiteralPath $outputFull)) { throw "PowerPoint did not write the expected PPTX: $outputFull" }
-    $resolvedPreviewDirectory = if ([string]::IsNullOrWhiteSpace($PreviewDirectory)) { "$outputFull.previews" } else { [IO.Path]::GetFullPath($PreviewDirectory) }
+    $resolvedPreviewDirectory = Resolve-GeneratorPreviewDirectory -RequestedDirectory $PreviewDirectory -OutputFullPath $outputFull
     $quality = Invoke-PowerPointQualityAudit -Presentation $presentation -PreviewDirectory $resolvedPreviewDirectory -ExportPreviews:(-not $SkipPreviewExport)
     if (-not $quality.pass -and -not $DoNotFailOnAudit) {
         throw "PowerPoint quality audit failed: $($quality.findings | ConvertTo-Json -Compress)"
     }
     Write-Output (ConvertTo-Json @{ output_path = $outputFull; slide_count = $slideTotal; editable_contract = "native-text-shapes"; quality_audit = $quality; preview_directory = if ($SkipPreviewExport) { $null } else { $resolvedPreviewDirectory } } -Depth 40 -Compress)
 } finally {
-    if ($presentation -and $KeepOpen -ne "True") { $presentation.Close() }
-    if ($ppt -and $KeepOpen -ne "True") { $ppt.Quit() }
+    if ($presentation -and -not $KeepOpen) { $presentation.Close() }
+    if ($ppt -and -not $KeepOpen) { $ppt.Quit() }
     if ($presentation) { [Runtime.InteropServices.Marshal]::ReleaseComObject($presentation) | Out-Null }
     if ($ppt) { [Runtime.InteropServices.Marshal]::ReleaseComObject($ppt) | Out-Null }
     [GC]::Collect()

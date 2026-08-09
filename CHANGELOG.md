@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.1
+
+- 收紧本地 MCP 的文件访问、布尔确认和 JSON-RPC 输入边界，防止提示注入诱导读取任意本机文件或覆盖现有演示稿。
+- 为临时目录、图片、PowerPoint/Word COM 和 PDF 解析增加链接、资源和自动化安全保护；Word PDF 回退默认关闭。
+- 将随包解析器升级至 PdfPig 0.1.15，并要求发布 CI 重建和验证二进制的资源限制。
+- 加固 Release ZIP、安装器和 GitHub Actions：严格校验完整清单、固定依赖、分离构建与发布权限，并拒绝覆盖既有 Release 资产。
+
 ## 1.0.0
 
 - 提供无 Node.js 的 PowerShell MCP 运行路径，并通过 `RemoteSigned` 启动策略运行。

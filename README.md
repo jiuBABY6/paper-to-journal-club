@@ -87,12 +87,12 @@ Get-FileHash -LiteralPath ./paper-to-journal-club-bootstrap.ps1 -Algorithm SHA25
 Get-Content -LiteralPath ./paper-to-journal-club-bootstrap.ps1.sha256
 ~~~
 
-3. 确认哈希一致后，在下载目录运行。下面以 v1.0.0 为例；安装新版本时替换标签即可：
+3. 确认哈希一致后，在下载目录运行。下面以 v1.0.1 为例；安装新版本时替换标签即可：
 
 ~~~powershell
 powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File ./paper-to-journal-club-bootstrap.ps1 `
   -RepositoryUrl 'https://github.com/jiuBABY6/paper-to-journal-club' `
-  -ReleaseTag 'v1.0.0'
+  -ReleaseTag 'v1.0.1'
 ~~~
 
 安装器会下载并校验 Marketplace ZIP，检查 PowerPoint，然后自动执行本地 Marketplace 注册和插件安装。默认安装目录为：
@@ -127,10 +127,22 @@ powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File ./install.ps1
 
 ### 第 3 步：上传论文并复制提示词
 
-1. 在 Codex 中上传论文 PDF；
+1. 将论文 PDF 放在“桌面”“文档”或“下载”目录，然后在 Codex 中上传该文件；
 2. 新建任务并粘贴下面的提示词；
 3. 先审阅插件输出的逐页提纲和证据，再确认生成 PowerPoint；
 4. 打开生成的 PPTX，结合预览图和质量报告进行最后核对。
+
+> **文件访问边界。** 为防止恶意论文或提示词诱导插件读取任意本机文件，插件默认只读写“桌面”“文档”“下载”及自身临时目录。若你的论文或输出必须存放在资料盘，请在**完全退出 Codex 前**将可信资料根写入当前 Windows 用户环境变量，然后重启 Codex：
+>
+> ~~~powershell
+> [Environment]::SetEnvironmentVariable(
+>   'PAPER_TO_JOURNAL_CLUB_ALLOWED_ROOTS',
+>   'D:\Research;E:\SharedPapers',
+>   'User'
+> )
+> ~~~
+>
+> 请只填确实存放论文/输出的窄目录；不要填写 `C:\`、整个用户目录或 `AppData`。Codex 的某些附件缓存路径可能不在默认目录内：遇到“approved user data directory”错误时，将论文另存到上述目录或配置资料根，而不是放宽到整个磁盘。
 
 ~~~text
 [@paper-to-journal-club](plugin://paper-to-journal-club@paper-to-journal-club-tools)
@@ -179,6 +191,8 @@ powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File ./install.ps1
 **提示找不到 PowerPoint。** 需要安装并至少启动一次 Microsoft PowerPoint 桌面版；网页版和 WPS 不提供本插件需要的 Windows COM 自动化接口。
 
 **企业策略阻止 PowerShell。** 安装器不会绕过企业安全策略。请让 IT 管理员审核 Release 哈希或部署经过 Authenticode 签名的版本。
+
+**为什么提示 bundled PDF parser is unavailable。** 正式发行包应自带受验证的 `paper-parser.exe`。插件默认不会使用 Word 打开 PDF 作为自动回退，因为 Word COM 无法可靠终止卡住的恶意或损坏 PDF。维护者排障时才可在启动 Codex 前设置 `PAPER_TO_JOURNAL_CLUB_ALLOW_WORD_PDF_FALLBACK=1`；普通用户不应启用它。
 
 **如何升级。** 从 Releases 页面选择新的固定版本标签，再次运行同一安装命令。安装器会保留此前的 current 版本目录，便于人工回退和排障。
 

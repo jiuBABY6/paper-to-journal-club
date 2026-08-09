@@ -9,9 +9,21 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <PublishTrimmed>false</PublishTrimmed>
     <InvariantGlobalization>false</InvariantGlobalization>
+    <!-- 构建时把已知依赖漏洞视为错误，防止带风险的 NuGet 依赖进入发行 EXE。 -->
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>moderate</NuGetAuditLevel>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsAsErrors>
+    <!--
+      正式构建必须使用已提交的 packages.lock.json。这里把锁文件与 locked mode 设为
+      项目默认值，防止维护者在未审阅依赖图变化时意外生成新的发行二进制。
+      锁文件只能由 tools/Generate-ParserPackageLock.ps1 在受控 SDK 中真实 restore 后生成。
+    -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode>true</RestoreLockedMode>
   </PropertyGroup>
   <ItemGroup>
-    <!-- Pinned for reproducible release builds; Apache-2.0 license. -->
-    <PackageReference Include="PdfPig" Version="0.1.13" />
+    <!-- 精确锁定到含深度和循环解析防护的稳定版；方括号禁止 NuGet 浮动到未审阅版本。 -->
+    <PackageReference Include="PdfPig" Version="[0.1.15]" />
   </ItemGroup>
 </Project>

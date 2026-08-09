@@ -7,27 +7,32 @@ on:
       - 'v*'
 
 permissions:
-  # GitHub CLI 需要该权限创建 Release 和上传校验后的发行资产。
-  contents: write
+  # 默认只读；写 Release 的权限在唯一的发布 job 中显式声明。
+  contents: read
 
 concurrency:
   group: paper-to-journal-club-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  build-and-release:
+  build-and-package:
     runs-on: windows-latest
 
     steps:
       - name: 检出固定版本标签
-        uses: actions/checkout@v4
+        # actions/checkout v4.3.1，固定到完整提交 SHA，避免可变标签供应链风险。
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          fetch-depth: 0
+          fetch-depth: 1
+          # 构建代码不保留可用于 git push 的凭据；发布令牌仅出现在独立 job。
+          persist-credentials: false
 
       - name: 安装发布者构建所需的 .NET SDK
-        uses: actions/setup-dotnet@v4
+        # actions/setup-dotnet v4.3.1，固定到完整提交 SHA。
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
         with:
-          dotnet-version: '8.0.x'
+          # 固定 SDK 补丁版本，避免每次标签构建解析到不同的 8.0.x。
+          dotnet-version: '8.0.418'
 
       - name: 检查标签与插件版本一致
         shell: pwsh
@@ -90,24 +95,56 @@ jobs:
           "bootstrap=$bootstrapPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "bootstrap_checksum=$bootstrapChecksumPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
-      - name: 创建或更新 GitHub Release
+      - name: 将经验证的发行资产交给最小权限发布 job
+        # actions/upload-artifact v4.6.2，固定完整 SHA；只传递四个最终 Release 资产。
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: paper-to-journal-club-release-assets-${{ github.ref_name }}
+          path: |
+            ${{ steps.package.outputs.archive }}
+            ${{ steps.package.outputs.checksum }}
+            ${{ steps.package.outputs.bootstrap }}
+            ${{ steps.package.outputs.bootstrap_checksum }}
+          if-no-files-found: error
+          retention-days: 1
+
+  create-release:
+    needs: build-and-package
+    runs-on: windows-latest
+    # 只有不执行仓库源码的发布 job 获得写 Release 的权限。
+    permissions:
+      contents: write
+
+    steps:
+      - name: 下载经验证的发行资产
+        # actions/download-artifact v4.3.0，固定完整 SHA。
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: paper-to-journal-club-release-assets-${{ github.ref_name }}
+          path: ${{ runner.temp }}/paper-to-journal-club-release-assets
+
+      - name: 创建不可覆盖的 GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $tag = $env:GITHUB_REF_NAME
-          $archive = '${{ steps.package.outputs.archive }}'
-          $checksum = '${{ steps.package.outputs.checksum }}'
-          $bootstrap = '${{ steps.package.outputs.bootstrap }}'
-          $bootstrapChecksum = '${{ steps.package.outputs.bootstrap_checksum }}'
-
-          & gh release view $tag --repo $env:GITHUB_REPOSITORY 2>$null | Out-Null
-          if ($LASTEXITCODE -eq 0) {
-            & gh release upload $tag $archive $checksum $bootstrap $bootstrapChecksum --clobber --repo $env:GITHUB_REPOSITORY
-          } else {
-            & gh release create $tag $archive $checksum $bootstrap $bootstrapChecksum --title "Paper to Journal Club $tag" --generate-notes --repo $env:GITHUB_REPOSITORY
+          $assetDirectory = Join-Path $env:RUNNER_TEMP 'paper-to-journal-club-release-assets'
+          $archives = @(Get-ChildItem -LiteralPath $assetDirectory -Filter 'paper-to-journal-club-marketplace-*.zip' -File)
+          if ($archives.Count -ne 1) { throw "发布资产中应恰好有一个 Marketplace ZIP，实际为 $($archives.Count) 个。" }
+          $archive = $archives[0].FullName
+          $checksum = "$archive.sha256"
+          $bootstrap = Join-Path $assetDirectory 'paper-to-journal-club-bootstrap.ps1'
+          $bootstrapChecksum = "$bootstrap.sha256"
+          foreach ($requiredAsset in @($archive, $checksum, $bootstrap, $bootstrapChecksum)) {
+            if (-not (Test-Path -LiteralPath $requiredAsset -PathType Leaf)) { throw "发布资产缺失：$requiredAsset" }
           }
+          if (@(Get-ChildItem -LiteralPath $assetDirectory -File).Count -ne 4) { throw '发布 job 只接受四个预期的 Release 资产。' }
+
+          # 标签一旦已有 Release 就让工作流失败，不覆写资产或哈希文件。
+          # 修复发行版应使用新的版本号和新标签，避免把同一标签悄悄指向不同二进制。
+          & gh release create $tag $archive $checksum $bootstrap $bootstrapChecksum --title "Paper to Journal Club $tag" --generate-notes --repo $env:GITHUB_REPOSITORY
           if ($LASTEXITCODE -ne 0) {
             throw "GitHub Release '$tag' 发布失败，退出码为 $LASTEXITCODE。"
           }

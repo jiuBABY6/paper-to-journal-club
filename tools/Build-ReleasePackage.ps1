@@ -34,6 +34,8 @@ $MarketplaceSource = Join-Path $RepositoryRoot '.agents\plugins\marketplace.json
 $PackageTester = Join-Path $PSScriptRoot 'Test-ReleasePackage.ps1'
 $PackageInstaller = Join-Path $PSScriptRoot 'Install-PaperToJournalClub.ps1'
 $PackageReadme = Join-Path $PSScriptRoot 'INSTALL.md'
+$ParserRuntimeTest = Join-Path $PluginRoot 'tests\parser-resource-limit-tests.ps1'
+$ParserPackageLock = Join-Path $PluginRoot 'parser\packages.lock.json'
 
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     $OutputDirectory = Join-Path $RepositoryRoot 'dist'
@@ -65,13 +67,29 @@ function Get-RelativePath {
 function Write-ChecksumManifest {
     param([Parameter(Mandatory)][string]$Root)
 
-    $hashLines = foreach ($file in Get-ChildItem -LiteralPath $Root -Recurse -File | Sort-Object FullName) {
+    # SHA256SUMS.txt 自身不能纳入哈希（会产生自引用循环）；其余所有文件必须恰好一条记录。
+    $entries = @{}
+    foreach ($file in Get-ChildItem -LiteralPath $Root -Recurse -File | Sort-Object FullName) {
         if ($file.Name -eq 'SHA256SUMS.txt') {
             continue
         }
+        if (($file.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "拒绝为重解析点文件生成发行清单：$($file.FullName)"
+        }
         $relative = Get-RelativePath -BasePath $Root -TargetPath $file.FullName
-        $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
-        "$hash  *$relative"
+        if ([string]::IsNullOrWhiteSpace($relative) -or $relative.StartsWith('/') -or $relative.Contains(':') -or $relative -match '(^|/)\.\.(/|$)') {
+            throw "发行文件路径不安全：$relative"
+        }
+        if ($entries.ContainsKey($relative)) {
+            throw "发行文件路径重复：$relative"
+        }
+        $entries[$relative] = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToUpperInvariant()
+    }
+    if ($entries.Count -eq 0) {
+        throw '拒绝生成空的 SHA-256 清单。'
+    }
+    $hashLines = foreach ($relative in @($entries.Keys | Sort-Object)) {
+        "$($entries[$relative])  *$relative"
     }
     Set-Content -LiteralPath (Join-Path $Root 'SHA256SUMS.txt') -Value $hashLines -Encoding UTF8
 }
@@ -125,12 +143,14 @@ $requiredInputs = @(
     $PackageTester,
     $PackageInstaller,
     $PackageReadme,
+    $ParserRuntimeTest,
     (Join-Path $PluginRoot '.mcp.json'),
     (Join-Path $PluginRoot 'scripts'),
     (Join-Path $PluginRoot 'skills'),
     (Join-Path $PluginRoot 'parser\PaperParser.csproj'),
     (Join-Path $PluginRoot 'parser\Program.cs'),
-    (Join-Path $PluginRoot 'parser\NuGet.Config')
+    (Join-Path $PluginRoot 'parser\NuGet.Config'),
+    $ParserPackageLock
 )
 foreach ($requiredPath in $requiredInputs) {
     if (-not (Test-Path -LiteralPath $requiredPath)) {
@@ -149,6 +169,10 @@ if ([string]::IsNullOrWhiteSpace($safeVersion)) {
 
 if (-not (Test-Path -LiteralPath $parserPath -PathType Leaf) -and -not $AllowMissingParser) {
     throw "随包 PDF 解析器不存在：$parserPath`n请先在发布机运行 .\plugins\$PluginName\scripts\build-paper-parser.ps1。"
+}
+if (-not $AllowMissingParser) {
+    # 正式打包前必须黑盒执行现有 EXE，拒绝仍携带 PdfPig 0.1.13 或缺少资源预算的旧二进制。
+    & $ParserRuntimeTest -ParserPath $parserPath -RequireRuntime -RequireLock
 }
 
 $resolvedOutput = [System.IO.Path]::GetFullPath($OutputDirectory)
@@ -187,7 +211,7 @@ foreach ($assetFile in @('paper-parser.exe', 'README.md')) {
 # 保留可审阅的解析器源码，以便发布者和安全团队重建 EXE；排除 bin/ 和 obj/。
 $stagedParserRoot = Join-Path $stagedPluginRoot 'parser'
 New-Item -ItemType Directory -Force -Path $stagedParserRoot | Out-Null
-foreach ($parserSourceFile in @('PaperParser.csproj', 'Program.cs', 'NuGet.Config')) {
+foreach ($parserSourceFile in @('PaperParser.csproj', 'Program.cs', 'NuGet.Config', 'packages.lock.json')) {
     Copy-RequiredItem -Source (Join-Path $PluginRoot "parser\$parserSourceFile") -Destination $stagedParserRoot
 }
 
@@ -232,5 +256,6 @@ if (-not $SkipArchive) {
     plugin = $PluginName
     version = $manifest.version
     parser_included = Test-Path -LiteralPath (Join-Path $stagedPluginRoot 'assets\paper-parser.exe')
+    code_signing_enabled = -not [string]::IsNullOrWhiteSpace($CodeSigningCertificateThumbprint)
     node_required = $false
 } | ConvertTo-Json -Depth 4

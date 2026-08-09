@@ -16,12 +16,37 @@ $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 $ScriptRoot = $PSScriptRoot
 $PluginRoot = Split-Path -Parent $ScriptRoot
+$PluginManifestPath = Join-Path $PluginRoot '.codex-plugin\plugin.json'
 $ParserPath = Join-Path $PluginRoot "assets\paper-parser.exe"
 $PptGeneratorPath = Join-Path $ScriptRoot "generate-editable-pptx.ps1"
 $PowerPointQualityPath = Join-Path $ScriptRoot "powerpoint-quality.ps1"
 $SupportedProtocolVersions = @('2024-11-05', '2025-03-26', '2025-06-18')
-$MaximumPaperBytes = 100MB
+$MaximumPaperBytes = 50MB
 $ParserTimeoutMilliseconds = 120000
+# MCP stdio 没有浏览器或 HTTP 网关代为限流，必须在服务端自行限制请求、对象图和生成规模。
+$MaximumMcpRequestCharacters = 1MB
+$MaximumToolArgumentCharacters = 768KB
+$MaximumToolObjectDepth = 20
+$MaximumToolObjectProperties = 96
+$MaximumToolArrayItems = 256
+$MaximumToolObjectNodes = 2500
+$MaximumDeckSlides = 30
+$MaximumBulletsPerSlide = 12
+$MaximumTextCharactersPerSlide = 8000
+$MaximumParserOutputCharacters = 4MB
+$MaximumParserErrorCharacters = 64KB
+$MaximumExtractedTextCharacters = 750000
+
+# MCP 握手返回的版本必须与插件清单一致，避免修复发布时遗漏同步硬编码版本号。
+try {
+    $PluginManifest = Get-Content -LiteralPath $PluginManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $PluginVersion = [string]$PluginManifest.version
+    if ($PluginVersion -notmatch '^\d+\.\d+\.\d+([-.][0-9A-Za-z.-]+)?$') {
+        throw 'version is missing or is not a semantic version.'
+    }
+} catch {
+    throw "Could not load the plugin version from ${PluginManifestPath}: $($_.Exception.Message)"
+}
 
 # 与生成器共用 PowerPoint COM 检查和原生渲染审计，避免 MCP 层声称了不存在的能力。
 . $PowerPointQualityPath
@@ -49,16 +74,163 @@ $KnownJournalClubSections = @(
 function Get-PropertyValue {
     param($Object, [string]$Name, $Default = $null)
     if ($null -eq $Object) { return $Default }
+    if ($Object -is [Collections.IDictionary]) {
+        if ($Object.Contains($Name)) { return $Object[$Name] }
+        return $Default
+    }
     $property = $Object.PSObject.Properties[$Name]
     if ($null -eq $property) { return $Default }
     return $property.Value
+}
+
+function Test-PropertyExists {
+    param($Object, [string]$Name)
+    if ($null -eq $Object) { return $false }
+    if ($Object -is [Collections.IDictionary]) { return $Object.Contains($Name) }
+    return $null -ne $Object.PSObject.Properties[$Name]
+}
+
+function Get-StrictBoolean {
+    param($Object, [string]$Name, [bool]$Default = $false)
+
+    if (-not (Test-PropertyExists $Object $Name)) { return $Default }
+    $value = Get-PropertyValue $Object $Name
+    # PowerShell 的 [bool]'false' 会得到 $true；因此绝不做字符串或数字转换。
+    if ($null -eq $value -or $value -isnot [bool]) {
+        throw "$Name must be a JSON boolean (true or false), not a string, number, or null."
+    }
+    return $value
+}
+
+function Assert-McpObject {
+    param($Value, [string]$ParameterName)
+    if ($null -eq $Value -or ($Value -isnot [Collections.IDictionary] -and $Value -isnot [System.Management.Automation.PSCustomObject])) {
+        throw "$ParameterName must be a JSON object."
+    }
+}
+
+function Get-McpObjectPropertyNames {
+    param($Value)
+    Assert-McpObject -Value $Value -ParameterName 'arguments'
+    if ($Value -is [Collections.IDictionary]) { return @($Value.Keys | ForEach-Object { [string]$_ }) }
+    return @($Value.PSObject.Properties | ForEach-Object { $_.Name })
+}
+
+function Assert-OnlyKnownArguments {
+    param($Arguments, [string[]]$AllowedNames, [string]$ToolName)
+    foreach ($name in @(Get-McpObjectPropertyNames $Arguments)) {
+        if ($name -notin $AllowedNames) { throw "$ToolName received an unsupported argument: $name" }
+    }
+}
+
+function Assert-StringArgument {
+    param($Arguments, [string]$Name, [bool]$Required = $false, [int]$MaximumLength = 4096)
+    if (-not (Test-PropertyExists $Arguments $Name)) {
+        if ($Required) { throw "$Name is required." }
+        return
+    }
+    $value = Get-PropertyValue $Arguments $Name
+    if ($value -isnot [string] -or [string]::IsNullOrWhiteSpace($value)) { throw "$Name must be a non-empty string." }
+    if ($value.Length -gt $MaximumLength) { throw "$Name exceeds the $MaximumLength-character safety limit." }
+}
+
+function Assert-IntegerArgument {
+    param($Arguments, [string]$Name, [int]$Minimum, [int]$Maximum, [int]$Default)
+    if (-not (Test-PropertyExists $Arguments $Name)) { return $Default }
+    $value = Get-PropertyValue $Arguments $Name
+    if ($value -isnot [byte] -and $value -isnot [sbyte] -and $value -isnot [int16] -and $value -isnot [uint16] -and $value -isnot [int32] -and $value -isnot [uint32] -and $value -isnot [int64]) {
+        throw "$Name must be an integer."
+    }
+    if ([int64]$value -lt $Minimum -or [int64]$value -gt $Maximum) { throw "$Name must be between $Minimum and $Maximum." }
+    return [int]$value
+}
+
+function Assert-StringArrayArgument {
+    param($Arguments, [string]$Name, [int]$MinimumItems = 0, [int]$MaximumItems = 32, [int]$MaximumItemLength = 128)
+    if (-not (Test-PropertyExists $Arguments $Name)) { return }
+    $value = Get-PropertyValue $Arguments $Name
+    if ($value -is [string] -or $value -isnot [Collections.IEnumerable]) { throw "$Name must be a JSON array." }
+    $items = @($value | ForEach-Object { $_ })
+    if ($items.Count -lt $MinimumItems -or $items.Count -gt $MaximumItems) { throw "$Name must contain between $MinimumItems and $MaximumItems items." }
+    foreach ($item in $items) {
+        if ($item -isnot [string] -or [string]::IsNullOrWhiteSpace($item) -or $item.Length -gt $MaximumItemLength) {
+            throw "$Name items must be non-empty strings no longer than $MaximumItemLength characters."
+        }
+    }
+}
+
+function Assert-McpValueLimits {
+    param($Value, [string]$Path = '$', [int]$Depth = 0, [ref]$State)
+
+    if ($Depth -gt $MaximumToolObjectDepth) { throw "$Path exceeds the $MaximumToolObjectDepth-level JSON nesting limit." }
+    $State.Value.nodes++
+    if ($State.Value.nodes -gt $MaximumToolObjectNodes) { throw "Tool arguments exceed the $MaximumToolObjectNodes-node safety limit." }
+    if ($null -eq $Value -or $Value -is [bool] -or $Value -is [byte] -or $Value -is [sbyte] -or $Value -is [int16] -or $Value -is [uint16] -or $Value -is [int32] -or $Value -is [uint32] -or $Value -is [int64] -or $Value -is [double] -or $Value -is [decimal]) { return }
+    if ($Value -is [string]) {
+        $State.Value.characters += $Value.Length
+        if ($State.Value.characters -gt $MaximumToolArgumentCharacters) { throw "Tool arguments exceed the $MaximumToolArgumentCharacters-character safety limit." }
+        return
+    }
+    if ($Value -is [Collections.IDictionary] -or $Value -is [System.Management.Automation.PSCustomObject]) {
+        $names = @(Get-McpObjectPropertyNames $Value)
+        if ($names.Count -gt $MaximumToolObjectProperties) { throw "$Path has more than $MaximumToolObjectProperties properties." }
+        foreach ($name in $names) {
+            if ($name.Length -gt 128) { throw "$Path contains an overlong property name." }
+            Assert-McpValueLimits -Value (Get-PropertyValue $Value $name) -Path "$Path.$name" -Depth ($Depth + 1) -State $State
+        }
+        return
+    }
+    if ($Value -is [Collections.IEnumerable]) {
+        $items = @($Value | ForEach-Object { $_ })
+        if ($items.Count -gt $MaximumToolArrayItems) { throw "$Path has more than $MaximumToolArrayItems array items." }
+        for ($index = 0; $index -lt $items.Count; $index++) {
+            Assert-McpValueLimits -Value $items[$index] -Path "$Path[$index]" -Depth ($Depth + 1) -State $State
+        }
+        return
+    }
+    throw "$Path contains an unsupported JSON value type."
+}
+
+function Assert-DeckSpecificationLimits {
+    param($Deck)
+    Assert-McpObject -Value $Deck -ParameterName 'deck_spec'
+    $slides = Get-PropertyValue $Deck 'slides'
+    if ($slides -is [string] -or $slides -isnot [Collections.IEnumerable]) { throw 'deck_spec.slides must be a JSON array.' }
+    $slideItems = @($slides | ForEach-Object { $_ })
+    if ($slideItems.Count -lt 1 -or $slideItems.Count -gt $MaximumDeckSlides) { throw "deck_spec.slides must contain between 1 and $MaximumDeckSlides slides." }
+    foreach ($slide in $slideItems) {
+        Assert-McpObject -Value $slide -ParameterName 'deck_spec.slides item'
+        foreach ($propertyName in @('title', 'takeaway', 'subtitle', 'source_text', 'suggested_image_path', 'figure_label', 'evidence_label')) {
+            if (Test-PropertyExists $slide $propertyName) {
+                $text = Get-PropertyValue $slide $propertyName
+                if ($text -isnot [string] -or $text.Length -gt $MaximumTextCharactersPerSlide) {
+                    throw "deck_spec slide $propertyName must be a string no longer than $MaximumTextCharactersPerSlide characters."
+                }
+            }
+        }
+        if (Test-PropertyExists $slide 'bullets') {
+            $bullets = Get-PropertyValue $slide 'bullets'
+            # Windows PowerShell 的 ConvertFrom-Json 会把单元素数组还原成标量；
+            # 兼容本插件自己产生的 deck-spec，同时仍限制条数和文本总量。
+            if ($null -eq $bullets) { $bulletItems = @() }
+            elseif ($bullets -is [string]) { $bulletItems = @($bullets) }
+            elseif ($bullets -is [Collections.IEnumerable]) { $bulletItems = @($bullets | ForEach-Object { $_ }) }
+            else { throw 'deck_spec slide bullets must be a JSON array or a single string.' }
+            if ($bulletItems.Count -gt $MaximumBulletsPerSlide) { throw "deck_spec slide bullets may contain at most $MaximumBulletsPerSlide items." }
+            foreach ($bullet in $bulletItems) {
+                if ($bullet -isnot [string] -or $bullet.Length -gt $MaximumTextCharactersPerSlide) { throw 'deck_spec slide bullet exceeds the text safety limit.' }
+            }
+        }
+    }
 }
 
 function Get-ValidatedPaperPath {
     param([string]$FilePath)
 
     if ([string]::IsNullOrWhiteSpace($FilePath)) { throw 'file_path is required.' }
-    $absolutePath = [IO.Path]::GetFullPath($FilePath)
+    # 论文只能来自用户资料目录或显式配置的资料根目录；示例目录仅供插件自检使用。
+    $readRoots = @((Get-PaperToJournalClubUserDataRoots) + (Get-PaperToJournalClubTemporaryRoot) + (Join-Path $PluginRoot 'examples'))
+    $absolutePath = Assert-PaperToJournalClubAllowedPath -Path $FilePath -AllowedRoots $readRoots -ParameterName 'file_path'
     if (-not (Test-Path -LiteralPath $absolutePath -PathType Leaf)) { throw "Paper file was not found: $absolutePath" }
     $extension = [IO.Path]::GetExtension($absolutePath).ToLowerInvariant()
     if ($extension -notin @('.pdf', '.txt', '.md', '.tex')) {
@@ -79,7 +251,10 @@ function Resolve-RequestedOutputPath {
     )
 
     if ([string]::IsNullOrWhiteSpace($Path)) { throw 'output_path is required.' }
-    $absolutePath = [IO.Path]::GetFullPath($Path)
+    $writeRoots = @(Get-PaperToJournalClubApprovedWriteRoots)
+    # run-demo 是开发演示入口，允许它写入插件内的示例目录；正式 MCP 调用绝不包含该目录。
+    if ($Demo) { $writeRoots += (Join-Path $PluginRoot 'examples') }
+    $absolutePath = Assert-PaperToJournalClubAllowedPath -Path $Path -AllowedRoots $writeRoots -ParameterName 'output_path'
     if ([IO.Path]::GetExtension($absolutePath).ToLowerInvariant() -ne $RequiredExtension.ToLowerInvariant()) {
         throw "output_path must end with $RequiredExtension."
     }
@@ -95,7 +270,7 @@ function Resolve-RequestedOutputPath {
 function Get-ExistingPowerPointPath {
     param([string]$Path)
     if ([string]::IsNullOrWhiteSpace($Path)) { throw 'file_path is required.' }
-    $absolutePath = [IO.Path]::GetFullPath($Path)
+    $absolutePath = Assert-PaperToJournalClubAllowedPath -Path $Path -AllowedRoots (Get-PaperToJournalClubApprovedWriteRoots) -ParameterName 'file_path'
     if ([IO.Path]::GetExtension($absolutePath).ToLowerInvariant() -ne '.pptx') { throw 'file_path must point to a .pptx file.' }
     if (-not (Test-Path -LiteralPath $absolutePath -PathType Leaf)) { throw "Presentation was not found: $absolutePath" }
     return $absolutePath
@@ -173,6 +348,10 @@ function Get-WordPdfText {
     $document = $null
     try {
         $word = New-Object -ComObject Word.Application
+        # msoAutomationSecurityForceDisable = 3；Word 仅作为解析器缺失时的受限回退，
+        # 打开不可信 PDF 前仍必须关闭宏和链接更新。
+        Set-PaperToJournalClubOfficeAutomationSecurity -Application $word -OfficeApplication 'Microsoft Word' -DisplayAlertsValue 0
+        try { $word.Options.UpdateLinksAtOpen = $false } catch { }
         $word.Visible = $false
         $document = $word.Documents.Open($FilePath, $false, $true, $false)
         return Normalize-Text $document.Content.Text
@@ -184,8 +363,10 @@ function Get-WordPdfText {
 
 function New-PaperAssetDirectory {
     param([string]$PaperPath, [string]$RequestedDirectory)
+    $temporaryRoot = Get-PaperToJournalClubTemporaryRoot
     if ($RequestedDirectory) {
-        $directory = [IO.Path]::GetFullPath($RequestedDirectory)
+        # 提取资产默认是短生命周期临时数据；不允许 MCP 直接向任意研究目录批量落盘图片。
+        $directory = Assert-PaperToJournalClubAllowedPath -Path $RequestedDirectory -AllowedRoots @($temporaryRoot) -ParameterName 'asset_output_dir'
         if (-not (Test-DirectoryIsEmptyOrMissing $directory)) {
             throw "asset_output_dir must be a new or empty directory so existing assets are not overwritten: $directory"
         }
@@ -193,7 +374,7 @@ function New-PaperAssetDirectory {
         # 默认使用用户临时目录，避免向已安装的插件目录写入运行时数据。
         $safeStem = ([IO.Path]::GetFileNameWithoutExtension($PaperPath) -replace '[^a-zA-Z0-9._-]', '-')
         if (-not $safeStem) { $safeStem = 'paper' }
-        $directory = Join-Path ([IO.Path]::GetTempPath()) "paper-to-journal-club\$safeStem-$([Guid]::NewGuid().ToString('N'))"
+        $directory = Assert-PaperToJournalClubAllowedPath -Path (Join-Path $temporaryRoot "$safeStem-$([Guid]::NewGuid().ToString('N'))") -AllowedRoots @($temporaryRoot) -ParameterName 'default asset_output_dir'
     }
     New-Item -ItemType Directory -Force -Path $directory | Out-Null
     return $directory
@@ -202,22 +383,64 @@ function New-PaperAssetDirectory {
 function Remove-TemporaryPaperAssets {
     param($Arguments)
     $directory = Get-PropertyValue $Arguments 'asset_output_dir'
-    $confirmed = [bool](Get-PropertyValue $Arguments 'confirm' $false)
+    $confirmed = Get-StrictBoolean -Object $Arguments -Name 'confirm' -Default $false
     if (-not $confirmed) { throw 'Set confirm=true before deleting extracted temporary paper assets.' }
     if ([string]::IsNullOrWhiteSpace($directory)) { throw 'asset_output_dir is required.' }
 
-    $target = [IO.Path]::GetFullPath($directory).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
-    $temporaryRoot = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) 'paper-to-journal-club')).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
-    $requiredPrefix = $temporaryRoot + [IO.Path]::DirectorySeparatorChar
-    if (-not $target.StartsWith($requiredPrefix, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Refusing to delete a directory outside this plugin's default temporary asset root: $temporaryRoot"
-    }
+    $temporaryRoot = Get-PaperToJournalClubTemporaryRoot
+    $target = Assert-PaperToJournalClubAllowedPath -Path $directory -AllowedRoots @($temporaryRoot) -ParameterName 'asset_output_dir'
     if (-not (Test-Path -LiteralPath $target)) {
         return [pscustomobject]@{ deleted = $false; asset_output_dir = $target; note = 'Directory was already absent.' }
     }
     # 只删除用户明确确认、且路径已验证在专用临时根目录内的资产目录。
     Remove-Item -LiteralPath $target -Recurse -Force
     return [pscustomobject]@{ deleted = $true; asset_output_dir = $target }
+}
+
+function Initialize-BoundedProcessTextReader {
+    if ($null -ne ('PaperToJournalClub.BoundedTextReader' -as [type])) { return }
+
+    # ReadToEndAsync 会在限制生效前完整分配子进程输出。这个小型托管读取器按 8 KiB 分块读取，
+    # 达到阈值后立即完成任务，让父进程终止异常输出的 parser.exe。
+    Add-Type -TypeDefinition @'
+using System;
+using System.IO;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace PaperToJournalClub
+{
+    public sealed class BoundedReadResult
+    {
+        public string Text;
+        public bool Exceeded;
+    }
+
+    public static class BoundedTextReader
+    {
+        public static async Task<BoundedReadResult> ReadAsync(StreamReader reader, int maximumCharacters)
+        {
+            var buffer = new char[8192];
+            var builder = new StringBuilder(Math.Min(maximumCharacters, buffer.Length));
+            while (true)
+            {
+                var read = await reader.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
+                if (read == 0)
+                {
+                    return new BoundedReadResult { Text = builder.ToString(), Exceeded = false };
+                }
+                if (builder.Length + read > maximumCharacters)
+                {
+                    var remaining = maximumCharacters - builder.Length;
+                    if (remaining > 0) { builder.Append(buffer, 0, remaining); }
+                    return new BoundedReadResult { Text = builder.ToString(), Exceeded = true };
+                }
+                builder.Append(buffer, 0, read);
+            }
+        }
+    }
+}
+'@
 }
 
 function Invoke-PaperParserPackage {
@@ -244,22 +467,63 @@ function Invoke-PaperParserPackage {
     $process.StartInfo = $startInfo
     try {
         if (-not $process.Start()) { throw 'Bundled PDF parser did not start.' }
-        $standardOutputTask = $process.StandardOutput.ReadToEndAsync()
-        $standardErrorTask = $process.StandardError.ReadToEndAsync()
-        if (-not $process.WaitForExit($ParserTimeoutMilliseconds)) {
-            try { $process.Kill() } catch { }
-            throw "PDF parsing exceeded the $([int]($ParserTimeoutMilliseconds / 1000))-second safety limit."
+        Initialize-BoundedProcessTextReader
+        $standardOutputTask = [PaperToJournalClub.BoundedTextReader]::ReadAsync($process.StandardOutput, $MaximumParserOutputCharacters)
+        $standardErrorTask = [PaperToJournalClub.BoundedTextReader]::ReadAsync($process.StandardError, $MaximumParserErrorCharacters)
+        $deadline = [DateTime]::UtcNow.AddMilliseconds($ParserTimeoutMilliseconds)
+        while (-not $process.HasExited) {
+            if ($standardOutputTask.IsCompleted -and $standardOutputTask.GetAwaiter().GetResult().Exceeded) {
+                try { $process.Kill() } catch { }
+                throw "Bundled PDF parser exceeded the $MaximumParserOutputCharacters-character stdout safety limit."
+            }
+            if ($standardErrorTask.IsCompleted -and $standardErrorTask.GetAwaiter().GetResult().Exceeded) {
+                try { $process.Kill() } catch { }
+                throw "Bundled PDF parser exceeded the $MaximumParserErrorCharacters-character stderr safety limit."
+            }
+            if ([DateTime]::UtcNow -ge $deadline) {
+                try { $process.Kill() } catch { }
+                throw "PDF parsing exceeded the $([int]($ParserTimeoutMilliseconds / 1000))-second safety limit."
+            }
+            Start-Sleep -Milliseconds 25
         }
-        $standardOutput = $standardOutputTask.GetAwaiter().GetResult()
-        $standardError = $standardErrorTask.GetAwaiter().GetResult()
+        if (-not $process.WaitForExit(5000)) {
+            try { $process.Kill() } catch { }
+            throw 'Bundled PDF parser did not finish flushing its output after exit.'
+        }
+        $standardOutputResult = $standardOutputTask.GetAwaiter().GetResult()
+        $standardErrorResult = $standardErrorTask.GetAwaiter().GetResult()
+        if ($standardOutputResult.Exceeded) { throw "Bundled PDF parser exceeded the $MaximumParserOutputCharacters-character stdout safety limit." }
+        if ($standardErrorResult.Exceeded) { throw "Bundled PDF parser exceeded the $MaximumParserErrorCharacters-character stderr safety limit." }
+        $standardOutput = $standardOutputResult.Text
+        $standardError = $standardErrorResult.Text
         if ($process.ExitCode -ne 0) {
             throw "Bundled PDF parser failed: $standardError"
         }
         if ([string]::IsNullOrWhiteSpace($standardOutput)) { throw 'Bundled PDF parser returned no JSON package.' }
-        return $standardOutput | ConvertFrom-Json
+        try {
+            return $standardOutput | ConvertFrom-Json
+        } catch {
+            throw "Bundled PDF parser returned invalid JSON. $($_.Exception.Message)"
+        }
     } finally {
         if ($process) { $process.Dispose() }
     }
+}
+
+function Assert-ExtractedAssetDirectoryLimits {
+    param([string]$Directory)
+
+    $safeDirectory = Assert-PaperToJournalClubAllowedPath -Path $Directory -AllowedRoots @((Get-PaperToJournalClubTemporaryRoot)) -ParameterName 'parser asset directory'
+    if (-not (Test-Path -LiteralPath $safeDirectory -PathType Container)) { throw 'Bundled PDF parser did not create its requested asset directory.' }
+    $files = @(Get-ChildItem -LiteralPath $safeDirectory -File -Recurse -Force)
+    if ($files.Count -gt 100) { throw 'Bundled PDF parser extracted more than the 100-file asset safety limit.' }
+    [int64]$totalBytes = 0
+    foreach ($file in $files) {
+        Assert-PaperToJournalClubNoReparsePoint -Path $file.FullName -ParameterName 'parser asset file'
+        $totalBytes += [int64]$file.Length
+        if ($totalBytes -gt 200MB) { throw 'Bundled PDF parser extracted more than the 200 MB asset safety limit.' }
+    }
+    return $safeDirectory
 }
 
 function Find-PageNumberForText {
@@ -283,6 +547,7 @@ function Get-PaperExtraction {
     $extension = [IO.Path]::GetExtension($absolutePath).ToLowerInvariant()
     if ($extension -in @('.txt', '.md', '.tex')) {
         $text = Normalize-Text (Get-Content -Raw -Encoding UTF8 -LiteralPath $absolutePath)
+        if ($text.Length -gt $MaximumExtractedTextCharacters) { throw "Paper text exceeds the $MaximumExtractedTextCharacters-character safety limit." }
         return [pscustomobject]@{
             text = $text
             pages = @([pscustomobject]@{ PageNumber = 1; Text = $text; Assets = @() })
@@ -297,20 +562,32 @@ function Get-PaperExtraction {
         try {
             # extract-package 会同时给出逐页文本与真实导出的图片资产；图号与图片的对应关系不在这里臆测。
             $package = Invoke-PaperParserPackage -PaperPath $absolutePath -AssetDirectory $assetDirectory
+            $reportedAssetDirectory = Get-PropertyValue $package 'asset_directory' $assetDirectory
+            $safeAssetDirectory = Assert-ExtractedAssetDirectoryLimits $reportedAssetDirectory
+            if (-not $safeAssetDirectory.Equals($assetDirectory, [StringComparison]::OrdinalIgnoreCase)) {
+                throw 'Bundled PDF parser returned an unexpected asset directory.'
+            }
             $text = Normalize-Text (Get-PropertyValue $package 'text' '')
+            if ($text.Length -gt $MaximumExtractedTextCharacters) { throw "Extracted PDF text exceeds the $MaximumExtractedTextCharacters-character safety limit." }
             if ($text.Length -ge 120) {
                 return [pscustomobject]@{
                     text = $text
                     pages = @(Get-PropertyValue $package 'pages' @())
-                    asset_directory = Get-PropertyValue $package 'asset_directory' $assetDirectory
-                    assets_truncated = [bool](Get-PropertyValue $package 'assets_truncated' $false)
+                    asset_directory = $safeAssetDirectory
+                    assets_truncated = Get-StrictBoolean -Object $package -Name 'assets_truncated' -Default $false
                     extraction_method = 'paper-parser-package'
                 }
             }
+            throw 'The PDF contains too little extractable text. It may be a scan and requires OCR.'
         } catch {
             # 发布包已携带解析器；失败时直接报告，避免再启动无法设置超时的 Word COM 回退。
             throw "Bundled PDF parser could not safely extract this paper. $($_.Exception.Message)"
         }
+    }
+    # Word COM 不能可靠地终止卡住的 PDF 打开操作，因此发布版默认不把它当作自动回退。
+    # 仅由管理员在启动 Codex 前显式设置环境变量后才启用，且仍保持宏禁用设置。
+    if ($env:PAPER_TO_JOURNAL_CLUB_ALLOW_WORD_PDF_FALLBACK -ne '1') {
+        throw 'Bundled PDF parser is unavailable. Word COM PDF fallback is disabled by default because it has no reliable watchdog; restore paper-parser.exe or explicitly set PAPER_TO_JOURNAL_CLUB_ALLOW_WORD_PDF_FALLBACK=1 before starting Codex.'
     }
     try {
         $wordText = Get-WordPdfText $absolutePath
@@ -438,7 +715,7 @@ function Invoke-AnalysePaper {
         extraction = [pscustomobject]@{
             method = Get-PropertyValue $extraction 'extraction_method'
             asset_directory = Get-PropertyValue $extraction 'asset_directory'
-            assets_truncated = [bool](Get-PropertyValue $extraction 'assets_truncated' $false)
+            assets_truncated = Get-StrictBoolean -Object $extraction -Name 'assets_truncated' -Default $false
             pages = @($pages | ForEach-Object {
                 [pscustomobject]@{
                     page_number = Get-PropertyValue $_ 'PageNumber'
@@ -560,8 +837,16 @@ function Get-FigureById {
     return $null
 }
 
+function Get-SafeEvidenceAssetDirectory {
+    param($EvidencePack)
+
+    $directory = Get-PropertyValue (Get-PropertyValue $EvidencePack 'extraction') 'asset_directory'
+    if ([string]::IsNullOrWhiteSpace($directory)) { return $null }
+    return Assert-PaperToJournalClubAllowedPath -Path $directory -AllowedRoots @((Get-PaperToJournalClubTemporaryRoot)) -ParameterName 'evidence_pack.extraction.asset_directory'
+}
+
 function Get-FigureAssetCandidates {
-    param($Figure)
+    param($Figure, [string]$AssetDirectory)
     if ($null -eq $Figure) { return @() }
 
     # 只透传解析器或用户已提供的图像资产路径，绝不根据图号猜测磁盘文件。
@@ -569,31 +854,37 @@ function Get-FigureAssetCandidates {
     foreach ($propertyName in @('figure_asset_candidates', 'asset_candidates', 'image_candidates')) {
         foreach ($value in @(Get-PropertyValue $Figure $propertyName @())) {
             foreach ($candidate in @(ConvertTo-NonEmptyStringArray $value)) {
-                if ($candidate -notin $candidates) { $candidates += $candidate }
+                if ([string]::IsNullOrWhiteSpace($AssetDirectory)) {
+                    throw 'Figure asset candidates require an extracted temporary asset directory from this plugin.'
+                }
+                $image = Get-PaperToJournalClubApprovedRasterImage -ImagePath $candidate -AllowedRoots @($AssetDirectory) -ParameterName 'figure asset candidate'
+                if ($image.path -notin $candidates) { $candidates += $image.path }
             }
         }
     }
     foreach ($propertyName in @('suggested_image_path', 'image_path', 'asset_path')) {
         $path = Get-PropertyValue $Figure $propertyName
-        if ($path -and $path -notin $candidates) { $candidates += [string]$path }
+        if ($path) {
+            if ([string]::IsNullOrWhiteSpace($AssetDirectory)) {
+                throw 'Figure asset candidates require an extracted temporary asset directory from this plugin.'
+            }
+            $image = Get-PaperToJournalClubApprovedRasterImage -ImagePath ([string]$path) -AllowedRoots @($AssetDirectory) -ParameterName 'figure asset candidate'
+            if ($image.path -notin $candidates) { $candidates += $image.path }
+        }
     }
     return @($candidates)
 }
 
 function Get-ExplicitFigureAssetPath {
-    param($Selections, [string]$FigureId)
+    param($Selections, [string]$FigureId, [string]$AssetDirectory)
     if ($null -eq $Selections -or -not $FigureId) { return $null }
     $candidate = Get-PropertyValue $Selections $FigureId
     if (-not $candidate) { return $null }
-    $path = [IO.Path]::GetFullPath([string]$candidate)
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-        throw "Selected figure asset for $FigureId was not found: $path"
+    if ([string]::IsNullOrWhiteSpace($AssetDirectory)) {
+        throw "Selected figure asset for $FigureId is only allowed when it was extracted into this plugin's temporary asset directory."
     }
-    $supportedExtensions = @('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.tif', '.tiff', '.emf', '.wmf', '.svg')
-    if ([IO.Path]::GetExtension($path).ToLowerInvariant() -notin $supportedExtensions) {
-        throw "Selected figure asset for $FigureId has an unsupported image extension: $path"
-    }
-    return $path
+    $image = Get-PaperToJournalClubApprovedRasterImage -ImagePath ([string]$candidate) -AllowedRoots @($AssetDirectory) -ParameterName "selected figure asset for $FigureId"
+    return $image.path
 }
 
 function Test-ChineseLanguage {
@@ -687,13 +978,14 @@ function Invoke-DesignDeck {
     param($Arguments)
     $evidencePack = Get-PropertyValue $Arguments 'evidence_pack'
     if (-not $evidencePack -or -not (Get-PropertyValue (Get-PropertyValue $evidencePack 'paper') 'title')) { throw 'A complete evidence_pack is required.' }
-    $duration = [int](Get-PropertyValue $Arguments 'duration_minutes' 15)
-    if ($duration -lt 5 -or $duration -gt 90) { throw 'duration_minutes must be between 5 and 90.' }
+    $duration = Assert-IntegerArgument -Arguments $Arguments -Name 'duration_minutes' -Minimum 5 -Maximum 90 -Default 15
     $language = Get-PropertyValue $Arguments 'language' 'zh-CN'
+    if ($language -isnot [string] -or [string]::IsNullOrWhiteSpace($language) -or $language.Length -gt 32) { throw 'language must be a non-empty string no longer than 32 characters.' }
     $audience = Get-PropertyValue $Arguments 'audience' 'lab'
-    if ($audience -notin @('lab', 'mixed', 'expert')) { $audience = 'lab' }
+    if ($audience -isnot [string] -or $audience -notin @('lab', 'mixed', 'expert')) { throw 'audience must be one of: lab, mixed, expert.' }
     $requiredSections = @(Resolve-RequiredSections (Get-PropertyValue $Arguments 'required_sections'))
     $figureAssetSelection = Get-PropertyValue $Arguments 'figure_asset_selection'
+    $extractedAssetDirectory = Get-SafeEvidenceAssetDirectory $evidencePack
     $isChinese = Test-ChineseLanguage $language
     $copy = if ($isChinese) {
         @{
@@ -806,8 +1098,8 @@ function Invoke-DesignDeck {
             $figureId = Find-FigureIdForClaim $claim $figures
             $figureIds = if ($figureId) { @([string]$figureId) } else { @() }
             $sourceFigure = Get-FigureById $figures $figureId
-            $figureAssetCandidates = @(Get-FigureAssetCandidates $sourceFigure)
-            $explicitImagePath = Get-ExplicitFigureAssetPath -Selections $figureAssetSelection -FigureId $figureId
+            $figureAssetCandidates = @(Get-FigureAssetCandidates -Figure $sourceFigure -AssetDirectory $extractedAssetDirectory)
+            $explicitImagePath = Get-ExplicitFigureAssetPath -Selections $figureAssetSelection -FigureId $figureId -AssetDirectory $extractedAssetDirectory
             if ($explicitImagePath -and $explicitImagePath -notin $figureAssetCandidates) {
                 $figureAssetCandidates = @($explicitImagePath) + $figureAssetCandidates
             }
@@ -875,7 +1167,7 @@ function Invoke-DesignDeck {
     }
     $outputPath = Get-PropertyValue $Arguments 'output_path'
     if ($outputPath) {
-        $overwrite = [bool](Get-PropertyValue $Arguments 'overwrite' $false)
+        $overwrite = Get-StrictBoolean -Object $Arguments -Name 'overwrite' -Default $false
         $absoluteOutput = Resolve-RequestedOutputPath -Path $outputPath -RequiredExtension '.json' -Overwrite $overwrite
         $deck | ConvertTo-Json -Depth 50 | Set-Content -Encoding UTF8 -LiteralPath $absoluteOutput
     }
@@ -1058,9 +1350,10 @@ function Release-ComReference {
 function Resolve-PreviewDirectory {
     param([string]$RequestedDirectory, [string]$DefaultStem)
     if ([string]::IsNullOrWhiteSpace($RequestedDirectory)) {
-        return Join-Path ([IO.Path]::GetTempPath()) "paper-to-journal-club\$DefaultStem-$([Guid]::NewGuid().ToString('N'))"
+        $defaultDirectory = Join-Path (Get-PaperToJournalClubTemporaryRoot) "$DefaultStem-$([Guid]::NewGuid().ToString('N'))"
+        return Assert-PaperToJournalClubAllowedPath -Path $defaultDirectory -AllowedRoots @((Get-PaperToJournalClubTemporaryRoot)) -ParameterName 'default preview_directory'
     }
-    $absoluteDirectory = [IO.Path]::GetFullPath($RequestedDirectory)
+    $absoluteDirectory = Assert-PaperToJournalClubAllowedPath -Path $RequestedDirectory -AllowedRoots (Get-PaperToJournalClubApprovedWriteRoots) -ParameterName 'preview_directory'
     if (-not (Test-DirectoryIsEmptyOrMissing $absoluteDirectory)) {
         throw "preview_directory must be a new or empty directory: $absoluteDirectory"
     }
@@ -1120,7 +1413,7 @@ function Invoke-InspectPowerPoint {
     param($Arguments)
     if (-not (Test-PowerPointComRegistration)) { throw 'Microsoft PowerPoint desktop is not registered on this computer.' }
     $filePath = Get-PropertyValue $Arguments 'file_path'
-    $exportPreviews = [bool](Get-PropertyValue $Arguments 'export_previews' $false)
+    $exportPreviews = Get-StrictBoolean -Object $Arguments -Name 'export_previews' -Default $false
     if ($filePath) {
         $absolutePath = Get-ExistingPowerPointPath $filePath
         $session = $null
@@ -1169,7 +1462,7 @@ function Invoke-AuditEditablePptx {
     if (-not $filePath) { throw 'file_path is required for a saved-PPTX audit.' }
     $inspectionArguments = [pscustomobject]@{
         file_path = $filePath
-        export_previews = [bool](Get-PropertyValue $Arguments 'export_previews' $true)
+        export_previews = Get-StrictBoolean -Object $Arguments -Name 'export_previews' -Default $true
         preview_directory = Get-PropertyValue $Arguments 'preview_directory'
     }
     return Invoke-InspectPowerPoint $inspectionArguments
@@ -1180,23 +1473,26 @@ function Invoke-GeneratePptx {
     $deck = Get-PropertyValue $Arguments 'deck_spec'
     $outputPath = Get-PropertyValue $Arguments 'output_path'
     if (-not $deck -or -not $outputPath) { throw 'deck_spec and output_path are required.' }
+    Assert-DeckSpecificationLimits -Deck $deck
     # 不能仅依赖调用方先执行 audit：直接调用生成工具也必须经过必备模块与证据门禁。
     $audit = Invoke-AuditDeck ([pscustomobject]@{ deck_spec = $deck })
     if (-not $audit.pass) {
         $blockingSummary = @($audit.findings | Where-Object { $_.severity -eq 'hard' } | Select-Object -First 5 | ForEach-Object { $_.issue }) -join ' | '
         throw "Deck failed the mandatory content audit. Resolve hard findings before generating PowerPoint: $blockingSummary"
     }
-    $overwrite = [bool](Get-PropertyValue $Arguments 'overwrite' $false)
+    $overwrite = Get-StrictBoolean -Object $Arguments -Name 'overwrite' -Default $false
     $absoluteOutput = Resolve-RequestedOutputPath -Path $outputPath -RequiredExtension '.pptx' -Overwrite $overwrite
     $specPath = "$absoluteOutput.deck-spec.json"
     if ((Test-Path -LiteralPath $specPath -PathType Leaf) -and -not $overwrite) {
         throw "Deck-spec sidecar already exists. Set overwrite=true only when it may be replaced: $specPath"
     }
     $deck | ConvertTo-Json -Depth 50 | Set-Content -Encoding UTF8 -LiteralPath $specPath
-    $keepOpen = [bool](Get-PropertyValue $Arguments 'keep_powerpoint_open' $false)
-    $exportPreviews = [bool](Get-PropertyValue $Arguments 'export_previews' $true)
+    $keepOpen = Get-StrictBoolean -Object $Arguments -Name 'keep_powerpoint_open' -Default $false
+    $exportPreviews = Get-StrictBoolean -Object $Arguments -Name 'export_previews' -Default $true
     $previewDirectory = if ($exportPreviews) { Resolve-PreviewDirectory (Get-PropertyValue $Arguments 'preview_directory') 'generated-previews' } else { $null }
-    $generatorArguments = @('-NoProfile', '-STA', '-ExecutionPolicy', 'RemoteSigned', '-File', $PptGeneratorPath, '-DeckSpecPath', $specPath, '-OutputPath', $absoluteOutput, '-KeepOpen', $keepOpen, '-Overwrite')
+    $generatorArguments = @('-NoProfile', '-STA', '-ExecutionPolicy', 'RemoteSigned', '-File', $PptGeneratorPath, '-DeckSpecPath', $specPath, '-OutputPath', $absoluteOutput)
+    if ($keepOpen) { $generatorArguments += '-KeepOpen' }
+    if ($overwrite) { $generatorArguments += '-Overwrite' }
     if ($previewDirectory) { $generatorArguments += @('-PreviewDirectory', $previewDirectory) }
     if (-not $exportPreviews) { $generatorArguments += '-SkipPreviewExport' }
     $generatorOutput = @(& powershell.exe @generatorArguments 2>&1)
@@ -1248,8 +1544,97 @@ function Write-McpResponse {
     [Console]::Out.WriteLine(($response | ConvertTo-Json -Depth 80 -Compress))
 }
 
+function Assert-FigureAssetSelectionArgument {
+    param($Arguments)
+    if (-not (Test-PropertyExists $Arguments 'figure_asset_selection')) { return }
+    $selection = Get-PropertyValue $Arguments 'figure_asset_selection'
+    Assert-McpObject -Value $selection -ParameterName 'figure_asset_selection'
+    $names = @(Get-McpObjectPropertyNames $selection)
+    if ($names.Count -gt 30) { throw 'figure_asset_selection may contain at most 30 figure mappings.' }
+    foreach ($figureId in $names) {
+        if ($figureId -notmatch '^fig-\d+[a-z]?$') { throw "figure_asset_selection key is not a supported figure id: $figureId" }
+        $path = Get-PropertyValue $selection $figureId
+        if ($path -isnot [string] -or [string]::IsNullOrWhiteSpace($path) -or $path.Length -gt 4096) {
+            throw "figure_asset_selection.$figureId must be a non-empty image path no longer than 4096 characters."
+        }
+    }
+}
+
+function Assert-McpToolArguments {
+    param([string]$Name, $Arguments)
+
+    Assert-McpObject -Value $Arguments -ParameterName 'tools/call arguments'
+    $state = [pscustomobject]@{ nodes = 0; characters = 0 }
+    Assert-McpValueLimits -Value $Arguments -State ([ref]$state)
+
+    switch ($Name) {
+        'analyse_paper' {
+            Assert-OnlyKnownArguments -Arguments $Arguments -AllowedNames @('file_path', 'asset_output_dir') -ToolName $Name
+            Assert-StringArgument -Arguments $Arguments -Name 'file_path' -Required $true
+            Assert-StringArgument -Arguments $Arguments -Name 'asset_output_dir'
+        }
+        'cleanup_paper_assets' {
+            Assert-OnlyKnownArguments -Arguments $Arguments -AllowedNames @('asset_output_dir', 'confirm') -ToolName $Name
+            Assert-StringArgument -Arguments $Arguments -Name 'asset_output_dir' -Required $true
+            if (-not (Get-StrictBoolean -Object $Arguments -Name 'confirm' -Default $false)) { throw 'Set confirm=true before deleting extracted temporary paper assets.' }
+        }
+        'design_journal_club_deck' {
+            Assert-OnlyKnownArguments -Arguments $Arguments -AllowedNames @('evidence_pack', 'duration_minutes', 'language', 'audience', 'required_sections', 'figure_asset_selection', 'output_path', 'overwrite') -ToolName $Name
+            if (-not (Test-PropertyExists $Arguments 'evidence_pack')) { throw 'evidence_pack is required.' }
+            Assert-McpObject -Value (Get-PropertyValue $Arguments 'evidence_pack') -ParameterName 'evidence_pack'
+            [void](Assert-IntegerArgument -Arguments $Arguments -Name 'duration_minutes' -Minimum 5 -Maximum 90 -Default 15)
+            Assert-StringArgument -Arguments $Arguments -Name 'language' -MaximumLength 32
+            if (Test-PropertyExists $Arguments 'audience') {
+                Assert-StringArgument -Arguments $Arguments -Name 'audience' -MaximumLength 16
+                if ((Get-PropertyValue $Arguments 'audience') -notin @('lab', 'mixed', 'expert')) { throw 'audience must be one of: lab, mixed, expert.' }
+            }
+            Assert-StringArrayArgument -Arguments $Arguments -Name 'required_sections' -MinimumItems 1 -MaximumItems 6 -MaximumItemLength 64
+            if (Test-PropertyExists $Arguments 'required_sections') {
+                foreach ($section in @(Get-PropertyValue $Arguments 'required_sections')) {
+                    if ($section -notin $KnownJournalClubSections) { throw "Unknown required_sections value: $section" }
+                }
+            }
+            Assert-FigureAssetSelectionArgument -Arguments $Arguments
+            Assert-StringArgument -Arguments $Arguments -Name 'output_path'
+            [void](Get-StrictBoolean -Object $Arguments -Name 'overwrite' -Default $false)
+        }
+        'audit_journal_club_deck' {
+            Assert-OnlyKnownArguments -Arguments $Arguments -AllowedNames @('deck_spec') -ToolName $Name
+            if (-not (Test-PropertyExists $Arguments 'deck_spec')) { throw 'deck_spec is required.' }
+            Assert-DeckSpecificationLimits -Deck (Get-PropertyValue $Arguments 'deck_spec')
+        }
+        'powerpoint_status' {
+            Assert-OnlyKnownArguments -Arguments $Arguments -AllowedNames @() -ToolName $Name
+        }
+        'inspect_powerpoint' {
+            Assert-OnlyKnownArguments -Arguments $Arguments -AllowedNames @('file_path', 'export_previews', 'preview_directory') -ToolName $Name
+            Assert-StringArgument -Arguments $Arguments -Name 'file_path'
+            [void](Get-StrictBoolean -Object $Arguments -Name 'export_previews' -Default $false)
+            Assert-StringArgument -Arguments $Arguments -Name 'preview_directory'
+        }
+        'audit_editable_pptx' {
+            Assert-OnlyKnownArguments -Arguments $Arguments -AllowedNames @('file_path', 'export_previews', 'preview_directory') -ToolName $Name
+            Assert-StringArgument -Arguments $Arguments -Name 'file_path' -Required $true
+            [void](Get-StrictBoolean -Object $Arguments -Name 'export_previews' -Default $true)
+            Assert-StringArgument -Arguments $Arguments -Name 'preview_directory'
+        }
+        'generate_editable_pptx' {
+            Assert-OnlyKnownArguments -Arguments $Arguments -AllowedNames @('deck_spec', 'output_path', 'overwrite', 'keep_powerpoint_open', 'export_previews', 'preview_directory') -ToolName $Name
+            if (-not (Test-PropertyExists $Arguments 'deck_spec')) { throw 'deck_spec is required.' }
+            Assert-DeckSpecificationLimits -Deck (Get-PropertyValue $Arguments 'deck_spec')
+            Assert-StringArgument -Arguments $Arguments -Name 'output_path' -Required $true
+            [void](Get-StrictBoolean -Object $Arguments -Name 'overwrite' -Default $false)
+            [void](Get-StrictBoolean -Object $Arguments -Name 'keep_powerpoint_open' -Default $false)
+            [void](Get-StrictBoolean -Object $Arguments -Name 'export_previews' -Default $true)
+            Assert-StringArgument -Arguments $Arguments -Name 'preview_directory'
+        }
+        default { throw "Unknown tool: $Name" }
+    }
+}
+
 function Invoke-McpTool {
     param([string]$Name, $Arguments)
+    Assert-McpToolArguments -Name $Name -Arguments $Arguments
     switch ($Name) {
         'analyse_paper' { return Invoke-AnalysePaper $Arguments }
         'cleanup_paper_assets' { return Remove-TemporaryPaperAssets $Arguments }
@@ -1263,6 +1648,33 @@ function Invoke-McpTool {
     }
 }
 
+function Read-McpRequestLineWithLimit {
+    param([int]$MaximumCharacters)
+
+    # Console.ReadLine 会在检查长度前把整个攻击请求分配到内存。逐字符读取并在超限后
+    # 丢弃到换行符，能把单个 JSON-RPC 请求的常驻内存限制在 MaximumCharacters 以内。
+    $builder = New-Object System.Text.StringBuilder
+    $discarding = $false
+    while ($true) {
+        $next = [Console]::In.Read()
+        if ($next -eq -1) {
+            if ($discarding) { throw "MCP request exceeds the $MaximumCharacters-character safety limit." }
+            if ($builder.Length -eq 0) { return $null }
+            return $builder.ToString()
+        }
+        if ($next -eq 10) {
+            if ($discarding) { throw "MCP request exceeds the $MaximumCharacters-character safety limit." }
+            return $builder.ToString()
+        }
+        if ($discarding) { continue }
+        if ($builder.Length -ge $MaximumCharacters) {
+            $discarding = $true
+            continue
+        }
+        [void]$builder.Append([char]$next)
+    }
+}
+
 if ($Demo) {
     if (-not $DemoInputPath) { throw 'DemoInputPath is required when using -Demo.' }
     $evidence = Invoke-AnalysePaper ([pscustomobject]@{ file_path = $DemoInputPath })
@@ -1271,10 +1683,20 @@ if ($Demo) {
     exit 0
 }
 
-while ($null -ne ($line = [Console]::In.ReadLine())) {
+while ($true) {
+    try {
+        $line = Read-McpRequestLineWithLimit -MaximumCharacters $MaximumMcpRequestCharacters
+    } catch {
+        Write-McpResponse $null $null $_.Exception.Message
+        continue
+    }
+    if ($null -eq $line) { break }
     if ([string]::IsNullOrWhiteSpace($line)) { continue }
     $request = $null
     try {
+        if ($line.Length -gt $MaximumMcpRequestCharacters) {
+            throw "MCP request exceeds the $MaximumMcpRequestCharacters-character safety limit."
+        }
         $request = $line.TrimStart([char]0xFEFF) | ConvertFrom-Json
         switch ($request.method) {
             'notifications/initialized' { continue }
@@ -1283,12 +1705,19 @@ while ($null -ne ($line = [Console]::In.ReadLine())) {
                 Write-McpResponse $request.id ([ordered]@{
                     protocolVersion = Select-McpProtocolVersion $requestedProtocol
                     capabilities = [ordered]@{ tools = [ordered]@{} }
-                    serverInfo = [ordered]@{ name = 'paper-to-journal-club'; version = '1.0.0' }
+                serverInfo = [ordered]@{ name = 'paper-to-journal-club'; version = $PluginVersion }
                 })
             }
             'tools/list' { Write-McpResponse $request.id ([ordered]@{ tools = Get-Tools }) }
             'tools/call' {
-                $toolResult = Invoke-McpTool (Get-PropertyValue $request.params 'name') (Get-PropertyValue $request.params 'arguments' ([pscustomobject]@{}))
+                $parameters = Get-PropertyValue $request 'params'
+                Assert-McpObject -Value $parameters -ParameterName 'tools/call params'
+                $toolName = Get-PropertyValue $parameters 'name'
+                if ($toolName -isnot [string] -or [string]::IsNullOrWhiteSpace($toolName) -or $toolName.Length -gt 128) {
+                    throw 'tools/call params.name must be a non-empty tool name string.'
+                }
+                $toolArguments = if (Test-PropertyExists $parameters 'arguments') { Get-PropertyValue $parameters 'arguments' } else { [pscustomobject]@{} }
+                $toolResult = Invoke-McpTool $toolName $toolArguments
                 Write-McpResponse $request.id ([ordered]@{ content = @([ordered]@{ type = 'text'; text = ($toolResult | ConvertTo-Json -Depth 80) }) })
             }
             default { Write-McpResponse $request.id $null "Unsupported method: $($request.method)" }

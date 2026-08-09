@@ -1,6 +1,6 @@
 {
   "name": "paper-to-journal-club",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "直接控制 Microsoft PowerPoint，将学术论文转为有证据来源、可编辑且可导出的组会演示文稿。",
   "author": {
     "name": "jiuBABY6"
