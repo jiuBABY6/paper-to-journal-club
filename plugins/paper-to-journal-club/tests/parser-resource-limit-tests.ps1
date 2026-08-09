@@ -88,7 +88,10 @@ function Test-ParserPackageLock {
     foreach ($entry in $pdfPigEntries) {
         $pdfPig = $entry.value
         Assert-Condition ([string]$pdfPig.type -ceq 'Direct') "PdfPig 必须是锁文件中的直接依赖：$($entry.target)"
-        Assert-Condition ([string]$pdfPig.requested -ceq '[0.1.15]') "PdfPig 锁文件请求版本必须精确为 [0.1.15]：$($entry.target)"
+        # NuGet 在不同 SDK 上会把同一 PackageReference 的 requested 字段序列化为
+        # 不同但等价的格式（例如 0.1.15 或 [0.1.15]）。精确请求约束由 csproj 的
+        # PackageReference 负责；锁文件在这里必须锁住同一个 resolved 版本和内容哈希。
+        Assert-Condition (-not [string]::IsNullOrWhiteSpace([string]$pdfPig.requested)) "PdfPig 锁文件必须保留 requested 版本信息：$($entry.target)"
         Assert-Condition ([string]$pdfPig.resolved -ceq '0.1.15') "PdfPig 锁文件解析版本必须精确为 0.1.15：$($entry.target)"
         $contentHash = [string]$pdfPig.contentHash
         $hashMatch = [regex]::Match($contentHash, '^sha512-(?<base64>[A-Za-z0-9+/]+={0,2})$')
