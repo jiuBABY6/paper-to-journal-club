@@ -5,6 +5,8 @@ on:
   push:
     tags:
       - 'v*'
+  # 手动触发只做完整构建、打包和离线验包预检；绝不创建 GitHub Release。
+  workflow_dispatch:
 
 permissions:
   # 默认只读；写 Release 的权限在唯一的发布 job 中显式声明。
@@ -40,6 +42,9 @@ jobs:
           global-json-file: global.json
 
       - name: 检查标签与插件版本一致
+        # 手动预检运行在 main 等分支上，没有正式标签；真正标签发布仍须严格匹配
+        # plugin.json 中的版本，防止发布资产与源码版本不一致。
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -114,6 +119,9 @@ jobs:
           retention-days: 1
 
   create-release:
+    # workflow_dispatch 永远只能生成临时 Actions 工件；只有真实 v* 标签 push
+    # 才能进入拥有 contents: write 权限的独立发布 job。
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: build-and-package
     runs-on: windows-latest
     # 只有不执行仓库源码的发布 job 获得写 Release 的权限。

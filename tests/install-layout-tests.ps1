@@ -116,6 +116,8 @@ Assert-True -Condition ($workflowSource.Contains('persist-credentials: false')) 
 Assert-True -Condition ($workflowSource.Contains("dotnet-version: '8.0.418'")) -Message 'release.yml 必须固定使用经过审核的 .NET SDK 8.0.418。'
 Assert-True -Condition ($workflowSource.Contains('global-json-file: global.json') -and $workflowSource.Contains("DOTNET_MULTILEVEL_LOOKUP: '0'")) -Message 'release.yml 必须使用 global.json 并隔离托管运行器预装 SDK。'
 Assert-True -Condition ($workflowSource.Contains('build-and-package:') -and $workflowSource.Contains('create-release:')) -Message 'release.yml 必须将只读构建与可写发布拆分为两个 job。'
+Assert-True -Condition ($workflowSource.Contains('workflow_dispatch:')) -Message 'release.yml 必须提供不创建 Release 的手动发布预检入口。'
+Assert-True -Condition ($workflowSource.Contains("if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')")) -Message 'release.yml 必须只允许真实标签 push 创建 Release。'
 
 $lockWorkflowSource = Get-Content -LiteralPath $lockWorkflowPath -Raw -Encoding UTF8
 foreach ($requiredFragment in @('workflow_dispatch:', 'permissions:', 'contents: read', 'actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5', 'actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9', 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02', 'Generate-ParserPackageLock.ps1', "dotnet-version: '8.0.418'")) {
