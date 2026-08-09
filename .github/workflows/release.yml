@@ -17,6 +17,10 @@ concurrency:
 jobs:
   build-and-package:
     runs-on: windows-latest
+    # 与锁文件生成流程一致：隔离托管运行器自带的其他 SDK，并服从仓库根
+    # global.json 的精确 SDK 约束，保证可复现的解析器二进制构建。
+    env:
+      DOTNET_MULTILEVEL_LOOKUP: '0'
 
     steps:
       - name: 检出固定版本标签
@@ -33,6 +37,7 @@ jobs:
         with:
           # 固定 SDK 补丁版本，避免每次标签构建解析到不同的 8.0.x。
           dotnet-version: '8.0.418'
+          global-json-file: global.json
 
       - name: 检查标签与插件版本一致
         shell: pwsh

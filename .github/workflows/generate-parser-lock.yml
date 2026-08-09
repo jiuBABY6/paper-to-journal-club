@@ -10,6 +10,10 @@ permissions:
 jobs:
   generate-lock:
     runs-on: windows-latest
+    # GitHub 托管运行器可能预装比本项目更新的 SDK。禁用多级查找并结合仓库根
+    # global.json，确保脚本不会悄悄解析到 .NET 10 等未审阅 SDK。
+    env:
+      DOTNET_MULTILEVEL_LOOKUP: '0'
     steps:
       # actions/checkout v4.3.1：固定到完整提交 SHA，且不保留 Git 写入凭据。
       - name: 检出待审阅源码
@@ -23,6 +27,7 @@ jobs:
         uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
         with:
           dotnet-version: '8.0.418'
+          global-json-file: global.json
 
       - name: 生成并验证锁文件
         shell: pwsh

@@ -38,6 +38,7 @@ $pluginName = 'paper-to-journal-club'
 $marketplaceName = 'paper-to-journal-club-tools'
 $installPowerShellPath = Join-Path $RepositoryRoot 'install.ps1'
 $publishingPath = Join-Path $RepositoryRoot 'PUBLISHING.md'
+$globalJsonPath = Join-Path $RepositoryRoot 'global.json'
 $workflowPath = Join-Path $RepositoryRoot '.github\workflows\release.yml'
 $lockWorkflowPath = Join-Path $RepositoryRoot '.github\workflows\generate-parser-lock.yml'
 $marketplacePath = Join-Path $RepositoryRoot '.agents\plugins\marketplace.json'
@@ -50,7 +51,7 @@ $releaseToolPaths = @(
     (Join-Path $RepositoryRoot 'tools\INSTALL.md')
 )
 
-foreach ($path in @($installPowerShellPath, $publishingPath, $workflowPath, $lockWorkflowPath, $marketplacePath, (Join-Path $pluginRoot '.codex-plugin\plugin.json'), (Join-Path $pluginRoot '.mcp.json')) + $releaseToolPaths) {
+foreach ($path in @($installPowerShellPath, $publishingPath, $globalJsonPath, $workflowPath, $lockWorkflowPath, $marketplacePath, (Join-Path $pluginRoot '.codex-plugin\plugin.json'), (Join-Path $pluginRoot '.mcp.json')) + $releaseToolPaths) {
     Assert-FileExists -Path $path
 }
 
@@ -100,6 +101,10 @@ Assert-True -Condition ($installSource -notmatch '(?m)^\s*Expand-Archive\b') -Me
 $publishingSource = Get-Content -LiteralPath $publishingPath -Raw -Encoding UTF8
 Assert-True -Condition ($publishingSource -match '\.zip\.sha256' -and $publishingSource -match 'bootstrap\.ps1' -and $publishingSource -match 'RemoteSigned') -Message 'PUBLISHING.md 必须说明外部 SHA-256、引导安装器与 RemoteSigned。'
 
+# 托管运行器可能同时预装多个 SDK；global.json 是所有脚本和工作流共享的 SDK 信任锚。
+$globalSdk = Get-Content -LiteralPath $globalJsonPath -Raw -Encoding UTF8 | ConvertFrom-Json
+Assert-True -Condition ($globalSdk.sdk.version -eq '8.0.418' -and $globalSdk.sdk.rollForward -eq 'disable' -and $globalSdk.sdk.allowPrerelease -eq $false) -Message 'global.json 必须精确固定 .NET SDK 8.0.418，且禁止自动滚动升级。'
+
 $workflowSource = Get-Content -LiteralPath $workflowPath -Raw -Encoding UTF8
 foreach ($requiredFragment in @('actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5', 'actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9', 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02', 'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093', 'Get-FileHash', 'bootstrap.ps1', 'gh release create')) {
     Assert-True -Condition ($workflowSource.Contains($requiredFragment)) -Message "release.yml 缺少预期发布步骤：$requiredFragment"
@@ -109,12 +114,14 @@ Assert-True -Condition (-not $workflowSource.Contains('release/Build-ReleasePack
 Assert-True -Condition (-not $workflowSource.Contains('--clobber')) -Message 'release.yml 不得覆写已有 Release 资产。'
 Assert-True -Condition ($workflowSource.Contains('persist-credentials: false')) -Message 'release.yml 必须禁止 checkout 持久化 GitHub 凭据。'
 Assert-True -Condition ($workflowSource.Contains("dotnet-version: '8.0.418'")) -Message 'release.yml 必须固定使用经过审核的 .NET SDK 8.0.418。'
+Assert-True -Condition ($workflowSource.Contains('global-json-file: global.json') -and $workflowSource.Contains("DOTNET_MULTILEVEL_LOOKUP: '0'")) -Message 'release.yml 必须使用 global.json 并隔离托管运行器预装 SDK。'
 Assert-True -Condition ($workflowSource.Contains('build-and-package:') -and $workflowSource.Contains('create-release:')) -Message 'release.yml 必须将只读构建与可写发布拆分为两个 job。'
 
 $lockWorkflowSource = Get-Content -LiteralPath $lockWorkflowPath -Raw -Encoding UTF8
 foreach ($requiredFragment in @('workflow_dispatch:', 'permissions:', 'contents: read', 'actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5', 'actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9', 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02', 'Generate-ParserPackageLock.ps1', "dotnet-version: '8.0.418'")) {
     Assert-True -Condition ($lockWorkflowSource.Contains($requiredFragment)) -Message "generate-parser-lock.yml 缺少受控锁文件生成步骤：$requiredFragment"
 }
+Assert-True -Condition ($lockWorkflowSource.Contains('global-json-file: global.json') -and $lockWorkflowSource.Contains("DOTNET_MULTILEVEL_LOOKUP: '0'")) -Message 'generate-parser-lock.yml 必须使用 global.json 并隔离托管运行器预装 SDK。'
 
 $parserProjectSource = Get-Content -LiteralPath (Join-Path $pluginRoot 'parser\PaperParser.csproj') -Raw -Encoding UTF8
 $parserTestSource = Get-Content -LiteralPath (Join-Path $pluginRoot 'tests\parser-resource-limit-tests.ps1') -Raw -Encoding UTF8
