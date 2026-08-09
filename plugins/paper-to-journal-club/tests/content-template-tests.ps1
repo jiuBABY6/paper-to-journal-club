@@ -13,6 +13,10 @@ $utf8 = New-Object System.Text.UTF8Encoding($false)
 [Console]::InputEncoding = $utf8
 [Console]::OutputEncoding = $utf8
 $OutputEncoding = $utf8
+$TestFixtureRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'fixtures'))
+if (-not (Test-Path -LiteralPath $TestFixtureRoot -PathType Container)) {
+    throw "Test fixture directory not found: $TestFixtureRoot"
+}
 $serverFullPath = [IO.Path]::GetFullPath($ServerPath)
 if (-not (Test-Path -LiteralPath $serverFullPath)) { throw "Server script not found: $serverFullPath" }
 
@@ -36,10 +40,27 @@ function Invoke-McpResponse {
     $startInfo.RedirectStandardError = $true
     $startInfo.StandardOutputEncoding = $utf8
 
+    # GitHub runner 的工作目录不属于普通用户 Desktop/Documents/Downloads。仅给本测试
+    # 启动的 MCP 子进程追加固定夹具目录，既覆盖中文样本，又不改变插件在真实用户环境
+    # 中的文件访问白名单，也不污染执行测试的父 PowerShell 会话。
+    $existingAllowedRoots = [Environment]::GetEnvironmentVariable('PAPER_TO_JOURNAL_CLUB_ALLOWED_ROOTS', 'Process')
+    $childAllowedRoots = if ([string]::IsNullOrWhiteSpace($existingAllowedRoots)) {
+        $TestFixtureRoot
+    } else {
+        "$existingAllowedRoots;$TestFixtureRoot"
+    }
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo = $startInfo
     try {
-        [void]$process.Start()
+        # Windows PowerShell 5.1 对 ProcessStartInfo.EnvironmentVariables 存在空集合
+        # 兼容性问题。只在启动子进程的瞬间设置当前进程变量，子进程会继承它；随后立即
+        # 恢复，因而不会影响本测试之外的任何 MCP 调用。
+        try {
+            [Environment]::SetEnvironmentVariable('PAPER_TO_JOURNAL_CLUB_ALLOWED_ROOTS', [string]$childAllowedRoots, 'Process')
+            [void]$process.Start()
+        } finally {
+            [Environment]::SetEnvironmentVariable('PAPER_TO_JOURNAL_CLUB_ALLOWED_ROOTS', $existingAllowedRoots, 'Process')
+        }
         $process.StandardInput.WriteLine($jsonLine)
         $process.StandardInput.Close()
         $standardOutput = $process.StandardOutput.ReadToEnd()
