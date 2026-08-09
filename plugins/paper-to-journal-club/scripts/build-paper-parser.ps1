@@ -72,7 +72,9 @@ try {
 
     # 先独立 restore。--locked-mode 禁止在发布时重算依赖图；若锁文件与项目不一致则直接失败。
     # --disable-parallel 让审计日志和失败点更容易复现，且避免并发下载放大网络资源占用。
-    & $dotnetPath restore $project --configfile $nugetConfig --runtime win-x64 --locked-mode --disable-parallel --no-http-cache "-p:BaseIntermediateOutputPath=$intermediateDirectory" "-p:BaseOutputPath=$binaryDirectory"
+    # dotnet restore 使用 --no-cache 清空 HTTP 缓存影响；不能沿用 NuGet 其他命令的
+    # 参数拼写，否则会被底层 MSBuild 作为未知开关拒绝。
+    & $dotnetPath restore $project --configfile $nugetConfig --runtime win-x64 --locked-mode --disable-parallel --no-cache "-p:BaseIntermediateOutputPath=$intermediateDirectory" "-p:BaseOutputPath=$binaryDirectory"
     if ($LASTEXITCODE -ne 0) { throw 'paper-parser dependency restore failed.' }
 
     & $dotnetPath publish $project -c Release -r win-x64 --self-contained true --no-restore -p:PublishSingleFile=true "-p:BaseIntermediateOutputPath=$intermediateDirectory" "-p:BaseOutputPath=$binaryDirectory" -o $publishDirectory

@@ -125,8 +125,14 @@ Assert-True -Condition ($lockWorkflowSource.Contains('global-json-file: global.j
 
 $parserProjectSource = Get-Content -LiteralPath (Join-Path $pluginRoot 'parser\PaperParser.csproj') -Raw -Encoding UTF8
 $parserTestSource = Get-Content -LiteralPath (Join-Path $pluginRoot 'tests\parser-resource-limit-tests.ps1') -Raw -Encoding UTF8
+$parserBuildSource = Get-Content -LiteralPath (Join-Path $pluginRoot 'scripts\build-paper-parser.ps1') -Raw -Encoding UTF8
+$lockGeneratorSource = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'tools\Generate-ParserPackageLock.ps1') -Raw -Encoding UTF8
 Assert-True -Condition ($parserProjectSource.Contains('<RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>') -and $parserProjectSource.Contains('<RestoreLockedMode>true</RestoreLockedMode>')) -Message '解析器项目必须启用 NuGet lock file 与 locked mode。'
 Assert-True -Condition ($parserTestSource.Contains('Test-ParserPackageLock') -and $parserTestSource.Contains('RequireLock')) -Message '解析器测试必须验证受控 NuGet 锁文件。'
+# dotnet restore 仅接受 --no-cache；--no-http-cache 会透传到 MSBuild 并在 Windows CI 中失败。
+foreach ($restoreSource in @($parserBuildSource, $lockGeneratorSource)) {
+    Assert-True -Condition ($restoreSource.Contains('--no-cache') -and -not $restoreSource.Contains('--no-http-cache')) -Message '解析器 restore 脚本必须使用 dotnet CLI 支持的 --no-cache，且不得使用 --no-http-cache。'
+}
 
 # -WhatIf 必须在请求网络或创建目录前退出，因而可用于 CI 中的安全预检。
 $unusedDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ("paper-to-journal-club-install-test-{0}" -f [Guid]::NewGuid().ToString('N'))

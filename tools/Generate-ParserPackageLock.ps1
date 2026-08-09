@@ -75,7 +75,9 @@ try {
         '--use-lock-file',
         '--force-evaluate',
         '--disable-parallel',
-        '--no-http-cache',
+        # dotnet restore 的 CLI 参数为 --no-cache；旧的 NuGet 参数写法会被 MSBuild
+        # 误认为未知开关而导致 CI 失败。
+        '--no-cache',
         '-p:RestoreLockedMode=false',
         "-p:BaseIntermediateOutputPath=$intermediateDirectory",
         "-p:BaseOutputPath=$binaryDirectory"
