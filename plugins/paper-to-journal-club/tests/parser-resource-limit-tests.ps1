@@ -93,9 +93,11 @@ function Test-ParserPackageLock {
         # PackageReference 负责；锁文件在这里必须锁住同一个 resolved 版本和内容哈希。
         Assert-Condition (-not [string]::IsNullOrWhiteSpace([string]$pdfPig.requested)) "PdfPig 锁文件必须保留 requested 版本信息：$($entry.target)"
         Assert-Condition ([string]$pdfPig.resolved -ceq '0.1.15') "PdfPig 锁文件解析版本必须精确为 0.1.15：$($entry.target)"
+        # NuGet packages.lock.json 的 contentHash 是原始 Base64 SHA-512，不使用 npm
+        # Subresource Integrity 的 sha512- 前缀。随后仍按解码后的 64 字节严格校验。
         $contentHash = [string]$pdfPig.contentHash
-        $hashMatch = [regex]::Match($contentHash, '^sha512-(?<base64>[A-Za-z0-9+/]+={0,2})$')
-        Assert-Condition $hashMatch.Success "PdfPig 锁文件 contentHash 不是 NuGet sha512 格式：$($entry.target)"
+        $hashMatch = [regex]::Match($contentHash, '^(?<base64>[A-Za-z0-9+/]+={0,2})$')
+        Assert-Condition $hashMatch.Success "PdfPig 锁文件 contentHash 不是有效的 NuGet Base64 SHA-512 格式：$($entry.target)"
         try {
             $decodedContentHash = [Convert]::FromBase64String($hashMatch.Groups['base64'].Value)
         } catch {

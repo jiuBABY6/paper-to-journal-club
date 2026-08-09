@@ -456,10 +456,13 @@ function Test-ParserDependencyLock {
     }
     foreach ($entry in $pdfPigEntries) {
         $pdfPig = $entry.value
-        if ([string]$pdfPig.type -cne 'Direct' -or [string]$pdfPig.requested -cne '[0.1.15]' -or [string]$pdfPig.resolved -cne '0.1.15') {
+        # requested 的文本序列化在 NuGet SDK 间可以不同；精确请求范围由 csproj
+        # 固定，这里验证直接依赖、非空 requested 与锁定后的精确 resolved 版本。
+        if ([string]$pdfPig.type -cne 'Direct' -or [string]::IsNullOrWhiteSpace([string]$pdfPig.requested) -or [string]$pdfPig.resolved -cne '0.1.15') {
             throw "packages.lock.json 的 PdfPig 条目不符合精确直接依赖要求：$($entry.target)"
         }
-        $hashMatch = [regex]::Match([string]$pdfPig.contentHash, '^sha512-(?<base64>[A-Za-z0-9+/]+={0,2})$')
+        # NuGet lock file 使用原始 Base64 SHA-512，而非带算法前缀的 SRI 字符串。
+        $hashMatch = [regex]::Match([string]$pdfPig.contentHash, '^(?<base64>[A-Za-z0-9+/]+={0,2})$')
         if (-not $hashMatch.Success) {
             throw "packages.lock.json 的 PdfPig contentHash 无效：$($entry.target)"
         }
