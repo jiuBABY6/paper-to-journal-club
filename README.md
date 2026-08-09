@@ -52,9 +52,28 @@ Paper to Journal Club 是一个运行在 Windows 本机的 Codex 插件：它先
 
 不支持 macOS、网页版 PowerPoint 或 WPS 演示。普通用户不需要 Git、Node.js、npm、Python 或 .NET SDK。
 
-## 安装
+## 第一次使用：只需 3 步
 
-### 推荐：从 GitHub Release 安装
+### 第 1 步：安装插件
+
+用户体验可以和 Scientific Illustrator 一样：把下面整段话直接发送给 Codex。不同之处是，本插件优先让 Codex 使用经过 SHA-256 校验的 GitHub Release 安装器，而不是直接检出开发仓库；安装器会把解压后的发行包根目录注册为**用户本机**的 Codex Marketplace。
+
+~~~text
+请安装 Paper to Journal Club：
+https://github.com/jiuBABY6/paper-to-journal-club
+
+请先读取该仓库的 GitHub Releases，选择最新的非草稿正式版本标签；如果没有正式 Release，请停止并告诉我，不要直接安装 main 或其他开发分支。
+下载该 Release 中的 paper-to-journal-club-bootstrap.ps1 及其同名 .sha256 文件，核验 SHA-256 一致后，使用明确的 ReleaseTag 运行安装器。
+安装器会下载并再次核验 Marketplace 发行包，将其根目录（含 .agents 和 plugins）注册为 Codex Marketplace，然后安装
+paper-to-journal-club@paper-to-journal-club-tools。
+
+如果需要下载、注册 Marketplace 或写入本机配置，请先向我说明并请求确认。
+不要使用 ExecutionPolicy Bypass。完成后报告实际安装的版本，并提醒我完全重启 Codex。
+~~~
+
+首次安装时，Codex 可能要求你确认网络访问、PowerShell 执行或本机配置写入；这是正常的安全确认。若 Codex 无法代为执行本机安装，请按下方步骤手动运行同一套 Release 安装器。
+
+#### 更可审计的方式：从 GitHub Release 安装
 
 1. 打开 [Releases 页面](https://github.com/jiuBABY6/paper-to-journal-club/releases)，下载同一版本的：
 
@@ -86,7 +105,7 @@ powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File ./paper-to-journal
 
 > 如果企业策略标记了已验证的下载脚本，可在确认 Release 来源和哈希后执行 Unblock-File -LiteralPath ./paper-to-journal-club-bootstrap.ps1。不要使用 ExecutionPolicy Bypass，也不要对来源不明的文件解除阻止。
 
-### 离线安装
+#### 离线安装
 
 管理员可下载同一 Release 中的 Marketplace ZIP 和对应 .sha256 文件，在离线环境核验后解压 ZIP。进入**解压后的包根目录**，运行：
 
@@ -96,7 +115,17 @@ powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File ./install.ps1
 
 不要把 Codex Marketplace 指向 plugins/paper-to-journal-club 子目录；正确的根目录同时包含 .agents 和 plugins。
 
-## 第一次使用
+### 第 2 步：重启 Codex，并打开 Microsoft PowerPoint
+
+安装完成后：
+
+1. 完全退出并重新打开 Codex；
+2. 新建一个任务；
+3. 打开准备查看或编辑的 **Microsoft PowerPoint 桌面版**。
+
+不需要预先新建演示文稿：插件会在后台创建一个新的 PPTX，不会覆盖你当前打开的演示文稿。仅支持 Windows Microsoft PowerPoint；不支持 WPS、macOS 或网页版 PowerPoint。
+
+### 第 3 步：上传论文并复制提示词
 
 1. 在 Codex 中上传论文 PDF；
 2. 新建任务并粘贴下面的提示词；
