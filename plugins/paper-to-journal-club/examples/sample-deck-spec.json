@@ -1,0 +1,407 @@
+﻿{
+    "schema_version":  "0.3",
+    "deck_template":  "journal-club",
+    "required_sections":  [
+                              "background",
+                              "innovation",
+                              "methods",
+                              "experimental_data",
+                              "limitations",
+                              "future_directions"
+                          ],
+    "language":  "zh-CN",
+    "duration_minutes":  15,
+    "audience":  "lab",
+    "paper":  {
+                  "title":  "Adaptive perturbation mapping identifies a context-dependent immune signaling circuit",
+                  "doi":  null,
+                  "year":  null
+              },
+    "evidence_pack":  {
+                          "schema_version":  "0.3",
+                          "source_file":  "examples/sample-paper.md",
+                          "paper":  {
+                                        "title":  "Adaptive perturbation mapping identifies a context-dependent immune signaling circuit",
+                                        "doi":  null,
+                                        "year":  null
+                                    },
+                          "extraction":  {
+                                             "method":  "plain-text",
+                                             "asset_directory":  null,
+                                             "assets_truncated":  false,
+                                             "pages":  [
+                                                           {
+                                                               "page_number":  1,
+                                                               "excerpt":  "Adaptive perturbation mapping identifies a context-dependent immune signaling circuit\n\nAbstract\n\nCell-state-specific responses to perturbation remain difficult to predict. We combined perturbation screening with single-cell sequencing to identify a signaling circuit that changes across inflammatory contexts. The model improved prediction of response compared with a baseline classifier.\n\nIntroduction\n\nImmune signaling is shaped by the microenvironment, but most screening studies average away cell-state differences. We asked whether a context-aware model could reveal interpretable regulatory relationships.\n\nMethods\n\nWe profiled three donor-derived cultures under control and inflammatory conditions. Guide abundance, viability, and transcriptional state were measured at 24 and 72 hours. Statistical comparisons used donor-aware mixed models.\n\nResults\n\nThe context-aware model significantly improved response prediction relative to the baseline model (Fig. 1b). Perturbation of regulator X increased pathway activation only in inflammatory cultures (Fig. 2a). Inhibition of mediator Y reduced the phenotype and supported a context-dependent mechanism (Fig. 3c).\n\nDiscussion\n\nThese results sugge",
+                                                               "assets":  [
+
+                                                                          ]
+                                                           }
+                                                       ]
+                                         },
+                          "sections":  [
+                                           {
+                                               "id":  "abstract-1",
+                                               "title":  "Abstract",
+                                               "source_page":  1,
+                                               "excerpt":  "Cell-state-specific responses to perturbation remain difficult to predict. We combined perturbation screening with single-cell sequencing to identify a signaling circuit that changes across inflammatory contexts. The model improved prediction of response compared with a baseline classifier."
+                                           },
+                                           {
+                                               "id":  "introduction-2",
+                                               "title":  "Introduction",
+                                               "source_page":  1,
+                                               "excerpt":  "Immune signaling is shaped by the microenvironment, but most screening studies average away cell-state differences. We asked whether a context-aware model could reveal interpretable regulatory relationships."
+                                           },
+                                           {
+                                               "id":  "methods-3",
+                                               "title":  "Methods",
+                                               "source_page":  1,
+                                               "excerpt":  "We profiled three donor-derived cultures under control and inflammatory conditions. Guide abundance, viability, and transcriptional state were measured at 24 and 72 hours. Statistical comparisons used donor-aware mixed models."
+                                           },
+                                           {
+                                               "id":  "results-4",
+                                               "title":  "Results",
+                                               "source_page":  1,
+                                               "excerpt":  "The context-aware model significantly improved response prediction relative to the baseline model (Fig. 1b). Perturbation of regulator X increased pathway activation only in inflammatory cultures (Fig. 2a). Inhibition of mediator Y reduced the phenotype and supported a context-dependent mechanism (Fig. 3c)."
+                                           },
+                                           {
+                                               "id":  "discussion-5",
+                                               "title":  "Discussion",
+                                               "source_page":  1,
+                                               "excerpt":  "These results suggest that regulatory effects can be conditional on inflammatory state. The limited donor number and in-vitro model constrain generalization."
+                                           }
+                                       ],
+                          "claims":  [
+                                         {
+                                             "id":  "claim-01",
+                                             "text":  "The context-aware model significantly improved response prediction relative to the baseline model (Fig. 1b).",
+                                             "evidence":  [
+                                                              {
+                                                                  "section_id":  "results-4",
+                                                                  "section_title":  "Results",
+                                                                  "page_number":  1,
+                                                                  "excerpt":  "The context-aware model significantly improved response prediction relative to the baseline model (Fig. 1b)."
+                                                              }
+                                                          ],
+                                             "confidence":  "needs-review",
+                                             "note":  "Automatically extracted candidate claim. Verify the source wording before making slides."
+                                         },
+                                         {
+                                             "id":  "claim-02",
+                                             "text":  "Perturbation of regulator X increased pathway activation only in inflammatory cultures (Fig. 2a).",
+                                             "evidence":  [
+                                                              {
+                                                                  "section_id":  "results-4",
+                                                                  "section_title":  "Results",
+                                                                  "page_number":  1,
+                                                                  "excerpt":  "Perturbation of regulator X increased pathway activation only in inflammatory cultures (Fig. 2a)."
+                                                              }
+                                                          ],
+                                             "confidence":  "needs-review",
+                                             "note":  "Automatically extracted candidate claim. Verify the source wording before making slides."
+                                         },
+                                         {
+                                             "id":  "claim-03",
+                                             "text":  "Inhibition of mediator Y reduced the phenotype and supported a context-dependent mechanism (Fig. 3c).",
+                                             "evidence":  [
+                                                              {
+                                                                  "section_id":  "results-4",
+                                                                  "section_title":  "Results",
+                                                                  "page_number":  1,
+                                                                  "excerpt":  "Inhibition of mediator Y reduced the phenotype and supported a context-dependent mechanism (Fig. 3c)."
+                                                              }
+                                                          ],
+                                             "confidence":  "needs-review",
+                                             "note":  "Automatically extracted candidate claim. Verify the source wording before making slides."
+                                         }
+                                     ],
+                          "figures":  [
+                                          {
+                                              "id":  "fig-1b",
+                                              "label":  "Fig. 1b",
+                                              "context":  "ed models.\n\nResults\n\nThe context-aware model significantly improved response prediction relative to the baseline model (Fig. 1b). Perturbation of regulator X increased pathway activation only in inflammatory cultures (Fig. 2a). Inhibition of mediator Y reduced the phenotype and supported a context-dependent mechanism (Fig. 3c).\n\nDiscussion\n\nThese results suggest that regulatory",
+                                              "source_page":  1
+                                          },
+                                          {
+                                              "id":  "fig-2a",
+                                              "label":  "Fig. 2a",
+                                              "context":  "o the baseline model (Fig. 1b). Perturbation of regulator X increased pathway activation only in inflammatory cultures (Fig. 2a). Inhibition of mediator Y reduced the phenotype and supported a context-dependent mechanism (Fig. 3c).\n\nDiscussion\n\nThese results suggest that regulatory effects can be conditional on inflammatory state. The limited donor number and in-vitro model con",
+                                              "source_page":  1
+                                          },
+                                          {
+                                              "id":  "fig-3c",
+                                              "label":  "Fig. 3c",
+                                              "context":  "mmatory cultures (Fig. 2a). Inhibition of mediator Y reduced the phenotype and supported a context-dependent mechanism (Fig. 3c).\n\nDiscussion\n\nThese results suggest that regulatory effects can be conditional on inflammatory state. The limited donor number and in-vitro model constrain generalization.",
+                                              "source_page":  1
+                                          }
+                                      ],
+                          "journal_club_defaults":  {
+                                                        "required_sections":  [
+                                                                                  "background",
+                                                                                  "innovation",
+                                                                                  "methods",
+                                                                                  "experimental_data",
+                                                                                  "limitations",
+                                                                                  "future_directions"
+                                                                              ]
+                                                    },
+                          "ambiguities":  [
+                                              "Candidate claims are not publication-ready facts until a reviewer confirms the original paper."
+                                          ]
+                      },
+    "theme":  {
+                  "primary":  "#114B5F",
+                  "accent":  "#F45B69",
+                  "background":  "#FFFFFF",
+                  "font":  "Aptos"
+              },
+    "slides":  [
+                   {
+                       "id":  "title",
+                       "kind":  "title",
+                       "section":  "",
+                       "title":  "Adaptive perturbation mapping identifies a context-dependent immune signaling circuit",
+                       "takeaway":  "文献组会",
+                       "bullets":  [
+
+                                   ],
+                       "source_claim_ids":  [
+
+                                            ],
+                       "source_section_ids":  [
+
+                                              ],
+                       "source_figure_ids":  [
+
+                                             ],
+                       "evidence_status":  "not-applicable",
+                       "content_mode":  "metadata",
+                       "subtitle":  "组会汇报 | 可编辑演示文稿草稿"
+                   },
+                   {
+                       "id":  "tl-dr",
+                       "kind":  "summary",
+                       "section":  "summary",
+                       "title":  "一句话总结：这篇论文回答了什么问题？",
+                       "takeaway":  "Cell-state-specific responses to perturbation remain difficult to predict.",
+                       "bullets":  [
+                                       "Cell-state-specific responses to perturbation remain difficult to predict.",
+                                       "We combined perturbation screening with single-cell sequencing to identify a signaling circuit that changes across inflammatory contexts.",
+                                       "The model improved prediction of response compared with a baseline classifier."
+                                   ],
+                       "source_claim_ids":  [
+
+                                            ],
+                       "source_section_ids":  [
+                                                  "abstract-1"
+                                              ],
+                       "source_figure_ids":  [
+
+                                             ],
+                       "evidence_status":  "source-backed",
+                       "content_mode":  "author-direct"
+                   },
+                   {
+                       "id":  "background",
+                       "kind":  "background",
+                       "section":  "background",
+                       "title":  "研究背景与知识缺口",
+                       "takeaway":  "Immune signaling is shaped by the microenvironment, but most screening studies average away cell-state differences.",
+                       "bullets":  [
+                                       "Immune signaling is shaped by the microenvironment, but most screening studies average away cell-state differences.",
+                                       "We asked whether a context-aware model could reveal interpretable regulatory relationships."
+                                   ],
+                       "source_claim_ids":  [
+
+                                            ],
+                       "source_section_ids":  [
+                                                  "introduction-2"
+                                              ],
+                       "source_figure_ids":  [
+
+                                             ],
+                       "evidence_status":  "source-backed",
+                       "content_mode":  "author-direct"
+                   },
+                   {
+                       "id":  "innovation",
+                       "kind":  "innovation",
+                       "section":  "innovation",
+                       "title":  "创新点与学术贡献",
+                       "takeaway":  "We combined perturbation screening with single-cell sequencing to identify a signaling circuit that changes across inflammatory contexts.",
+                       "bullets":  [
+                                       "We combined perturbation screening with single-cell sequencing to identify a signaling circuit that changes across inflammatory contexts."
+                                   ],
+                       "source_claim_ids":  [
+
+                                            ],
+                       "source_section_ids":  [
+                                                  "abstract-1"
+                                              ],
+                       "source_figure_ids":  [
+
+                                             ],
+                       "evidence_status":  "source-backed",
+                       "content_mode":  "author-direct"
+                   },
+                   {
+                       "id":  "methods",
+                       "kind":  "methods",
+                       "section":  "methods",
+                       "title":  "研究方法与实验设计",
+                       "takeaway":  "We profiled three donor-derived cultures under control and inflammatory conditions.",
+                       "bullets":  [
+                                       "We profiled three donor-derived cultures under control and inflammatory conditions.",
+                                       "Guide abundance, viability, and transcriptional state were measured at 24 and 72 hours.",
+                                       "Statistical comparisons used donor-aware mixed models."
+                                   ],
+                       "source_claim_ids":  [
+
+                                            ],
+                       "source_section_ids":  [
+                                                  "methods-3"
+                                              ],
+                       "source_figure_ids":  [
+
+                                             ],
+                       "evidence_status":  "source-backed",
+                       "content_mode":  "author-direct"
+                   },
+                   {
+                       "id":  "experimental-data-1",
+                       "kind":  "result",
+                       "section":  "experimental_data",
+                       "title":  "实验数据 1",
+                       "takeaway":  "The context-aware model significantly improved response prediction relative to the baseline model (Fig. 1b).",
+                       "bullets":  [
+                                       "汇报前请结合原始图注核对统计学描述和因果措辞。",
+                                       "将引用的论文图作为原子图像插入，图中文字、箭头和标注应保持可编辑。"
+                                   ],
+                       "source_claim_ids":  [
+                                                "claim-01"
+                                            ],
+                       "source_section_ids":  [
+                                                  "results-4"
+                                              ],
+                       "source_figure_ids":  [
+                                                 "fig-1b"
+                                             ],
+                       "evidence_status":  "source-backed",
+                       "content_mode":  "author-direct",
+                       "suggested_figure_id":  "fig-1b"
+                   },
+                   {
+                       "id":  "experimental-data-2",
+                       "kind":  "result",
+                       "section":  "experimental_data",
+                       "title":  "实验数据 2",
+                       "takeaway":  "Perturbation of regulator X increased pathway activation only in inflammatory cultures (Fig. 2a).",
+                       "bullets":  [
+                                       "汇报前请结合原始图注核对统计学描述和因果措辞。",
+                                       "将引用的论文图作为原子图像插入，图中文字、箭头和标注应保持可编辑。"
+                                   ],
+                       "source_claim_ids":  [
+                                                "claim-02"
+                                            ],
+                       "source_section_ids":  [
+                                                  "results-4"
+                                              ],
+                       "source_figure_ids":  [
+                                                 "fig-2a"
+                                             ],
+                       "evidence_status":  "source-backed",
+                       "content_mode":  "author-direct",
+                       "suggested_figure_id":  "fig-2a"
+                   },
+                   {
+                       "id":  "experimental-data-3",
+                       "kind":  "result",
+                       "section":  "experimental_data",
+                       "title":  "实验数据 3",
+                       "takeaway":  "Inhibition of mediator Y reduced the phenotype and supported a context-dependent mechanism (Fig. 3c).",
+                       "bullets":  [
+                                       "汇报前请结合原始图注核对统计学描述和因果措辞。",
+                                       "将引用的论文图作为原子图像插入，图中文字、箭头和标注应保持可编辑。"
+                                   ],
+                       "source_claim_ids":  [
+                                                "claim-03"
+                                            ],
+                       "source_section_ids":  [
+                                                  "results-4"
+                                              ],
+                       "source_figure_ids":  [
+                                                 "fig-3c"
+                                             ],
+                       "evidence_status":  "source-backed",
+                       "content_mode":  "author-direct",
+                       "suggested_figure_id":  "fig-3c"
+                   },
+                   {
+                       "id":  "limitations",
+                       "kind":  "limitations",
+                       "section":  "limitations",
+                       "title":  "局限性与批判性评价",
+                       "takeaway":  "The limited donor number and in-vitro model constrain generalization.",
+                       "bullets":  [
+                                       "The limited donor number and in-vitro model constrain generalization."
+                                   ],
+                       "source_claim_ids":  [
+
+                                            ],
+                       "source_section_ids":  [
+                                                  "discussion-5"
+                                              ],
+                       "source_figure_ids":  [
+
+                                             ],
+                       "evidence_status":  "source-backed",
+                       "content_mode":  "author-direct"
+                   },
+                   {
+                       "id":  "future-directions",
+                       "kind":  "future-directions",
+                       "section":  "future_directions",
+                       "title":  "未来研究方向",
+                        "takeaway":  "Presenter discussion / 汇报者讨论：请设计能够回应已报告局限性的下一步实验。",
+                       "bullets":  [
+                                       "已报告的局限性：The limited donor number and in-vitro model constrain generalization.",
+                                       "汇报者建议：所有验证性方案均应标注为讨论，而非作者结论。"
+                                   ],
+                       "source_claim_ids":  [
+
+                                            ],
+                       "source_section_ids":  [
+                                                  "discussion-5"
+                                              ],
+                       "source_figure_ids":  [
+
+                                             ],
+                       "evidence_status":  "source-backed",
+                       "content_mode":  "presenter-discussion"
+                   },
+                   {
+                       "id":  "takeaway",
+                       "kind":  "takeaway",
+                       "section":  "takeaway",
+                       "title":  "核心结论",
+                       "takeaway":  "The context-aware model significantly improved response prediction relative to the baseline model (Fig. 1b).",
+                       "bullets":  [
+                                       "结论必须限定在原始研究的数据和方法边界内。",
+                                       "请为 lab 听众准备讨论问题。"
+                                   ],
+                       "source_claim_ids":  [
+                                                "claim-01",
+                                                "claim-02",
+                                                "claim-03"
+                                            ],
+                       "source_section_ids":  [
+                                                  "results-4"
+                                              ],
+                       "source_figure_ids":  [
+
+                                             ],
+                       "evidence_status":  "source-backed",
+                       "content_mode":  "author-direct"
+                   }
+               ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "paper-to-journal-club-tools",
+  "interface": {
+    "displayName": "Paper To Journal Club Tools"
+  },
+  "plugins": [
+    {
+      "name": "paper-to-journal-club",
+      "source": {
+        "source": "local",
+        "path": "./plugins/paper-to-journal-club"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

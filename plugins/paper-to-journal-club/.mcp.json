@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "paper-to-journal-club": {
+      "command": "powershell.exe",
+      "args": ["-NoProfile", "-ExecutionPolicy", "RemoteSigned", "-File", "./scripts/paper-to-journal-club-server.ps1"],
+      "cwd": "."
+    }
+  }
+}

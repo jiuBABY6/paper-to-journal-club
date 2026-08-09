@@ -1,0 +1,24 @@
+{
+  "name": "paper-to-journal-club",
+  "version": "1.0.0",
+  "description": "直接控制 Microsoft PowerPoint，将学术论文转为有证据来源、可编辑且可导出的组会演示文稿。",
+  "author": {
+    "name": "jiuBABY6"
+  },
+  "license": "MIT",
+  "keywords": ["paper", "journal-club", "pptx", "powerpoint", "academic"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Paper to Journal Club",
+    "shortDescription": "直接控制 PowerPoint，从论文生成可编辑组会 PPT。",
+    "longDescription": "面向 Windows Microsoft PowerPoint：无需用户安装 Node.js。插件以 PowerShell 作为 MCP 服务，发布包携带自包含 PDF 文本提取器；它解析论文为带证据定位的中间结构，设计组会叙事，创建原生可编辑对象，并输出可复核的质量报告。",
+    "developerName": "Paper to Journal Club Contributors",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Write"],
+    "defaultPrompt": [
+      "读取我上传的论文，为 15 分钟中文组会设计叙事，并先给出逐页提纲供我确认。",
+      "将这篇论文生成可编辑的 PowerPoint，保留每条关键结论对应的图号和论文证据。"
+    ]
+  }
+}

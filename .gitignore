@@ -1,0 +1,15 @@
+# 解析器的编译中间文件；发布时仅提交已验证的 paper-parser.exe。
+plugins/paper-to-journal-club/parser/bin/
+plugins/paper-to-journal-club/parser/obj/
+plugins/paper-to-journal-club/assets/parser-publish/
+
+# 本地构建工具、下载缓存和临时发行产物不应进入 GitHub 仓库。
+.tools/
+dist/
+release/
+
+# 质量审计与手工试运行产生的可再生成文件。
+plugins/paper-to-journal-club/examples/audit-previews/
+plugins/paper-to-journal-club/examples/sample-deck-spec-*.json
+plugins/paper-to-journal-club/examples/*.generated.pptx
+plugins/paper-to-journal-club/examples/*.generated.json
