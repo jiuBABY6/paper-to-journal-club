@@ -439,7 +439,10 @@ static string TrimTrailingDirectorySeparators(string path)
     return path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 }
 
-internal sealed class ResourceLimitExceededException : InvalidDataException
+// InvalidDataException 在当前 .NET 目标框架中是 sealed，不能作为领域异常的基类。
+// IOException 仍能准确表达不安全/无效的本地输入或输出状态，且保留内层异常与退出码 7 的
+// 专用处理语义。
+internal sealed class ResourceLimitExceededException : IOException
 {
     public ResourceLimitExceededException(string message) : base(message) { }
     public ResourceLimitExceededException(string message, Exception innerException) : base(message, innerException) { }

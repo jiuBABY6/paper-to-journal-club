@@ -480,6 +480,8 @@ $programText = [IO.File]::ReadAllText($programPath, $utf8)
 foreach ($requiredToken in @('--build-info', 'MaximumExtractedTextCharacters', 'MaximumTotalAssetBytes', 'MinimumFreeDiskBytes', 'MaximumPathCharacters', 'FileMode.CreateNew', 'ResourceLimitExceededException')) {
     Assert-Condition ($programText.Contains($requiredToken)) "Program.cs must contain parser resource control: $requiredToken"
 }
+Assert-Condition ($programText -match 'internal\s+sealed\s+class\s+ResourceLimitExceededException\s*:\s*IOException') 'ResourceLimitExceededException 必须继承可扩展的 IOException，而非 sealed 的 InvalidDataException。'
+Assert-Condition ($programText -notmatch 'class\s+ResourceLimitExceededException\s*:\s*InvalidDataException') 'ResourceLimitExceededException 不得继承 sealed 的 InvalidDataException。'
 
 # 本回归在检查真实 EXE 前执行，因此即便开发机尚未安装 .NET SDK，也会验证进程读取的
 # 并发排空、输出上限和硬超时语义。
