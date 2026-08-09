@@ -21,7 +21,11 @@ $buildRoot = Join-Path ([IO.Path]::GetTempPath()) "paper-to-journal-club-parser-
 $publishDirectory = Join-Path $buildRoot 'publish'
 $intermediateDirectory = (Join-Path $buildRoot 'obj') + [IO.Path]::DirectorySeparatorChar
 $binaryDirectory = (Join-Path $buildRoot 'bin') + [IO.Path]::DirectorySeparatorChar
-$temporaryOutput = "$output.$([Guid]::NewGuid().ToString('N')).tmp"
+$replacementId = [Guid]::NewGuid().ToString('N')
+$temporaryOutput = "$output.$replacementId.tmp"
+# 使用同目录、唯一的备份路径实现可恢复的替换；避免 PowerShell 调用 .NET File.Replace
+# 时将空备份路径误绑定为空字符串，也兼容 Windows PowerShell 5.1。
+$temporaryBackup = "$output.$replacementId.backup"
 
 function Assert-RequiredFile {
     param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Label)
@@ -90,17 +94,33 @@ try {
     & $runtimeTest -ParserPath $builtExecutable -RequireRuntime -RequireLock
     if ($LASTEXITCODE -ne 0) { throw 'Built parser failed resource-limit verification.' }
 
-    # 先复制到同目录临时文件，验证完成后再替换旧 EXE，避免失败时破坏原有已发布二进制。
+    # 先复制到同目录临时文件，验证完成后再替换旧 EXE。先把旧文件移动到唯一备份，
+    # 新文件移动失败时立即恢复旧文件；成功后才删除备份。
     [IO.File]::Copy($builtExecutable, $temporaryOutput, $false)
     if (Test-Path -LiteralPath $output -PathType Leaf) {
-        [IO.File]::Replace($temporaryOutput, $output, $null)
+        Move-Item -LiteralPath $output -Destination $temporaryBackup
+        try {
+            Move-Item -LiteralPath $temporaryOutput -Destination $output
+        } catch {
+            $replacementError = $_
+            if ((Test-Path -LiteralPath $temporaryBackup -PathType Leaf) -and -not (Test-Path -LiteralPath $output -PathType Leaf)) {
+                try {
+                    Move-Item -LiteralPath $temporaryBackup -Destination $output
+                } catch {
+                    Write-Warning "Unable to restore the previous parser executable from ${temporaryBackup}: $($_.Exception.Message)"
+                }
+            }
+            throw $replacementError
+        }
+        Remove-Item -LiteralPath $temporaryBackup -Force
     } else {
         Move-Item -LiteralPath $temporaryOutput -Destination $output
     }
     Write-Output "Built and verified $output"
 }
 finally {
-    # 仅删除本脚本创建的带 GUID 临时目录和未完成替换的临时 EXE，不影响源码或已发布解析器。
+    # 仅删除本脚本创建的带 GUID 临时目录和未完成的新 EXE，不影响源码或已发布解析器。
+    # 如果替换/恢复均失败，保留备份文件以免丢失旧的解析器；构建会失败，发布不会继续。
     if (Test-Path -LiteralPath $temporaryOutput) {
         Remove-Item -LiteralPath $temporaryOutput -Force
     }

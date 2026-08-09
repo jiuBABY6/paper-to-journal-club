@@ -28,6 +28,7 @@ $projectPath = Join-Path $pluginRoot 'parser\PaperParser.csproj'
 $programPath = Join-Path $pluginRoot 'parser\Program.cs'
 $nugetConfigPath = Join-Path $pluginRoot 'parser\NuGet.Config'
 $packageLockPath = Join-Path $pluginRoot 'parser\packages.lock.json'
+$buildScriptPath = Join-Path $pluginRoot 'scripts\build-paper-parser.ps1'
 $expectedLimits = [ordered]@{
     maximum_input_bytes = 104857600
     maximum_pdf_pages = 200
@@ -482,6 +483,11 @@ foreach ($requiredToken in @('--build-info', 'MaximumExtractedTextCharacters', '
 }
 Assert-Condition ($programText -match 'internal\s+sealed\s+class\s+ResourceLimitExceededException\s*:\s*IOException') 'ResourceLimitExceededException 必须继承可扩展的 IOException，而非 sealed 的 InvalidDataException。'
 Assert-Condition ($programText -notmatch 'class\s+ResourceLimitExceededException\s*:\s*InvalidDataException') 'ResourceLimitExceededException 不得继承 sealed 的 InvalidDataException。'
+
+$buildScriptText = [IO.File]::ReadAllText($buildScriptPath, $utf8)
+Assert-Condition ($buildScriptText.Contains('Move-Item -LiteralPath $output -Destination $temporaryBackup') -and $buildScriptText.Contains('Move-Item -LiteralPath $temporaryOutput -Destination $output')) '解析器构建脚本必须先备份旧 EXE，再移动已验证的新 EXE。'
+Assert-Condition ($buildScriptText.Contains('Unable to restore the previous parser executable')) '解析器构建脚本必须在替换失败时尝试恢复旧 EXE。'
+Assert-Condition (-not $buildScriptText.Contains('[IO.File]::Replace(')) '解析器构建脚本不得使用会把空备份路径误传给 .NET 的 File.Replace。'
 
 # 本回归在检查真实 EXE 前执行，因此即便开发机尚未安装 .NET SDK，也会验证进程读取的
 # 并发排空、输出上限和硬超时语义。
