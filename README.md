@@ -1,64 +1,79 @@
-# Paper to Journal Club
+# 🧪 Paper to Journal Club
 
 将一篇学术论文制作成可编辑、可导出、适合组会汇报的 Microsoft PowerPoint 演示稿。
 
-Paper to Journal Club 是一个运行在 Windows 本机的 Codex 插件：它先从论文构建可追溯的证据包，再生成组会叙事和逐页提纲，经过内容审核后，由本机 Microsoft PowerPoint 创建原生可编辑的 PPTX。运行时不依赖 Node.js、npm、Python 或 .NET。
+> ✨ 从论文证据出发，先生成可审阅的故事线，再用本机 PowerPoint 创建原生可编辑 PPTX。
 
-> 这是“GitHub Release + 本地 Codex Marketplace”分发的插件，不是公网 MCP 服务，也不会自动进入 OpenAI 公共 Plugins Directory。
+**Windows · Microsoft PowerPoint · Codex 本地 Marketplace**
 
-## 适合谁
+[🔖 最新正式版本](https://github.com/jiuBABY6/paper-to-journal-club/releases/latest) · [🐛 反馈问题](https://github.com/jiuBABY6/paper-to-journal-club/issues) · [📜 更新记录](CHANGELOG.md)
 
-- 需要把论文快速转为 10–20 分钟组会汇报的科研人员；
-- 希望保留可编辑文字、形状、箭头、表格和图注，而不是只得到一张图片的用户；
-- 需要核对结论、图号、章节和原文证据的导师、学生或实验室成员。
+Paper to Journal Club 运行在 Windows 本机：它先从论文构建可追溯的证据包，再生成组会叙事和逐页提纲；经你确认后，由本机 Microsoft PowerPoint 创建原生可编辑的 PPTX。普通用户运行时不需要安装 Node.js、npm、Python 或 .NET SDK。
 
-## 你会得到什么
+> 🔒 本项目采用“GitHub Release + 本地 Codex Marketplace”分发。它不是公网 MCP 服务，也不会自动进入 OpenAI 公共插件目录。
 
-默认生成一份 16:9 的组会演示稿，并覆盖以下六个必备模块：
+## 🎯 适合谁
 
-1. 研究背景与知识缺口；
-2. 创新点与学术贡献；
-3. 研究方法与实验设计；
-4. 实验数据与核心发现；
-5. 局限性与批判性评价；
-6. 未来研究方向。
+- 想把论文快速转为 10–20 分钟组会汇报的科研人员；
+- 希望保留可编辑文字、形状、箭头、表格和图注，而不是只得到一张扁平图片的用户；
+- 需要核对结论、图号、章节和原文证据的导师、学生与实验室成员。
 
-生成过程会输出：
+## 📦 你会得到什么
 
-- 可核对的 evidence pack：论文章节、候选结论、图号、页码和原文摘录；
-- 可修改的逐页 deck spec：在生成 PowerPoint 前审阅故事线；
-- 原生可编辑的 PPTX：文字、形状、箭头、流程图和表格都可继续修改；
-- 每页 PNG 预览与质量报告：检查文字溢出、画布越界和可编辑对象结构。
+默认生成一份 16:9 组会演示稿，覆盖六个必备模块：
 
-可下载查看一个示例演示稿：[sample-journal-club.pptx](plugins/paper-to-journal-club/examples/sample-journal-club.pptx)。对应的可审阅内容规格见 [sample-deck-spec.json](plugins/paper-to-journal-club/examples/sample-deck-spec.json)。
+1. 🌱 研究背景与知识缺口；
+2. 💡 创新点与学术贡献；
+3. 🔬 研究方法与实验设计；
+4. 📊 实验数据与核心发现；
+5. ⚖️ 局限性与批判性评价；
+6. 🔭 未来研究方向。
 
-## 核心功能
+生成过程中还会输出：
+
+- 🧾 **Evidence pack**：论文章节、候选结论、图号、页码和原文摘录；
+- 🗂️ **Deck spec**：生成 PowerPoint 前可修改、可审阅的逐页提纲；
+- 🖼️ **可编辑 PPTX**：文字、形状、箭头、流程图和表格都可继续修改；
+- ✅ **预览与质量报告**：逐页 PNG 预览、文字溢出、画布越界和对象结构检查。
+
+可先查看示例：[sample-journal-club.pptx](plugins/paper-to-journal-club/examples/sample-journal-club.pptx)；对应的可审阅内容规格见 [sample-deck-spec.json](plugins/paper-to-journal-club/examples/sample-deck-spec.json)。
+
+## ✨ 核心能力
 
 - 支持 PDF、TXT、Markdown 和 TeX 论文输入；
-- 正式发行包自带 paper-parser.exe，普通用户无需安装解析环境；
-- 默认生成六个组会模块；缺少来源或必备模块时会阻止生成 PPT；
+- 正式发行包自带 `paper-parser.exe`，普通用户无需配置解析环境；
+- 缺少来源或六个必备模块时，会阻止生成 PPT，避免“看起来完整、实际不可追溯”；
 - 每个关键结论可保留来源章节、图号、页码或原文摘录；
-- 复杂原始科研图以紧裁剪图片插入；标题、箭头、注释和强调框尽量使用 PowerPoint 原生对象重建；
+- 复杂原始科研图可作为紧裁剪图片插入；标题、箭头、注释和强调框尽量用 PowerPoint 原生对象构建；
 - 使用 Windows PowerPoint COM 创建、保存、导出和重新打开审计演示稿；
-- 生成时始终新建后台演示文稿，不会覆盖你当前打开的 PowerPoint；
-- 支持 powerpoint_status、inspect_powerpoint 和 audit_editable_pptx，如实说明是当前窗口检查还是文件只读审计。
+- 始终创建新的后台演示文稿，不会覆盖你当前打开的 PowerPoint；
+- 支持 `powerpoint_status`、`inspect_powerpoint` 和 `audit_editable_pptx`，如实说明当前窗口检查或文件只读审计的结果。
 
-## 使用前需要准备
+## ✅ 使用前准备
 
-- 64 位 Windows；
-- 已安装并可正常启动的 Microsoft PowerPoint 桌面版；
-- Codex 桌面版或 Codex CLI；
-- 网络安装时能够访问 GitHub Release。
+| 需要 | 说明 |
+|---|---|
+| 🪟 64 位 Windows | 当前仅支持 Windows。 |
+| 📽️ Microsoft PowerPoint 桌面版 | 已安装且至少成功启动过一次。 |
+| 🤖 Codex 桌面版或 Codex CLI | 用于安装和调用本地 Marketplace。 |
+| 🌐 GitHub Release 网络访问 | 仅在在线安装或升级时需要。 |
 
 不支持 macOS、网页版 PowerPoint 或 WPS 演示。普通用户不需要 Git、Node.js、npm、Python 或 .NET SDK。
 
-## 第一次使用：只需 3 步
+## 🚀 安装插件：选择一种方式
 
-### 第 1 步：安装插件
+| 方式 | 适合谁 | 特点 |
+|---|---|---|
+| 🤖 让 Codex 安装 | 大多数用户 | 最省事；Codex 会在操作前请求确认。 |
+| 🔐 从 Release 手动安装 | 希望逐项核验的用户 | 先比对脚本 SHA-256，再运行固定版本安装器。 |
+| ⌨️ 命令行下载并安装 | 熟悉 PowerShell 的用户 | 不需要打开浏览器，仍会校验 SHA-256。 |
+| 📴 离线安装 | 管理员、内网或受限网络环境 | 可在联网机器下载并核验后转移 ZIP。 |
 
-用户体验可以和 Scientific Illustrator 一样：把下面整段话直接发送给 Codex。不同之处是，本插件优先让 Codex 使用经过 SHA-256 校验的 GitHub Release 安装器，而不是直接检出开发仓库；安装器会把解压后的发行包根目录注册为**用户本机**的 Codex Marketplace。
+### 🤖 方式 1：把安装说明发送给 Codex（推荐）
 
-~~~text
+新建一个普通 Codex 任务，把下面整段话完整发送给 Codex：
+
+```text
 请安装 Paper to Journal Club：
 https://github.com/jiuBABY6/paper-to-journal-club
 
@@ -69,82 +84,124 @@ paper-to-journal-club@paper-to-journal-club-tools。
 
 如果需要下载、注册 Marketplace 或写入本机配置，请先向我说明并请求确认。
 不要使用 ExecutionPolicy Bypass。完成后报告实际安装的版本，并提醒我完全重启 Codex。
-~~~
+```
 
-首次安装时，Codex 可能要求你确认网络访问、PowerShell 执行或本机配置写入；这是正常的安全确认。若 Codex 无法代为执行本机安装，请按下方步骤手动运行同一套 Release 安装器。
+首次安装时，Codex 可能要求你确认网络访问、PowerShell 执行或本机配置写入；这是正常的安全确认。若 Codex 无法代为执行本机安装，请使用下面任一手动方式。
 
-#### 更可审计的方式：从 GitHub Release 安装
+### 🔐 方式 2：浏览器下载 Release 安装器
 
-1. 打开 [Releases 页面](https://github.com/jiuBABY6/paper-to-journal-club/releases)，下载同一版本的：
+1. 打开 [Releases 页面](https://github.com/jiuBABY6/paper-to-journal-club/releases)，选择一个固定的正式版本，例如 `v1.0.1`。
+2. 下载同一 Release 中的：
 
-   - paper-to-journal-club-bootstrap.ps1
-   - paper-to-journal-club-bootstrap.ps1.sha256
+   - `paper-to-journal-club-bootstrap.ps1`
+   - `paper-to-journal-club-bootstrap.ps1.sha256`
 
-2. 在 PowerShell 中核对下载脚本的 SHA-256：
+3. 在下载目录打开 PowerShell，核对脚本哈希：
 
-~~~powershell
+```powershell
 Get-FileHash -LiteralPath ./paper-to-journal-club-bootstrap.ps1 -Algorithm SHA256
 Get-Content -LiteralPath ./paper-to-journal-club-bootstrap.ps1.sha256
-~~~
+```
 
-3. 确认哈希一致后，在下载目录运行。下面以 v1.0.1 为例；安装新版本时替换标签即可：
+4. 确认两处 SHA-256 一致后运行。以下以 `v1.0.1` 为例；安装新版时只替换标签：
 
-~~~powershell
+```powershell
 powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File ./paper-to-journal-club-bootstrap.ps1 `
   -RepositoryUrl 'https://github.com/jiuBABY6/paper-to-journal-club' `
   -ReleaseTag 'v1.0.1'
-~~~
+```
 
-安装器会下载并校验 Marketplace ZIP，检查 PowerPoint，然后自动执行本地 Marketplace 注册和插件安装。默认安装目录为：
+安装器会再次校验 Marketplace ZIP、检查 PowerPoint、注册本地 Marketplace 并安装插件。默认安装目录为：
 
-~~~text
-%LOCALAPPDATA%/Codex/marketplaces/paper-to-journal-club/current
-~~~
+```text
+%LOCALAPPDATA%\Codex\marketplaces\paper-to-journal-club\current
+```
 
-安装完成后，完全退出并重新打开 Codex，再新建一个任务。
+> 🛡️ 如果企业策略标记了已核验的下载脚本，请在确认 Release 来源与 SHA-256 后执行 `Unblock-File -LiteralPath ./paper-to-journal-club-bootstrap.ps1`。不要使用 `ExecutionPolicy Bypass`，也不要对来源不明的文件解除阻止。
 
-> 如果企业策略标记了已验证的下载脚本，可在确认 Release 来源和哈希后执行 Unblock-File -LiteralPath ./paper-to-journal-club-bootstrap.ps1。不要使用 ExecutionPolicy Bypass，也不要对来源不明的文件解除阻止。
+### ⌨️ 方式 3：用 PowerShell 下载、校验并安装固定版本
 
-#### 离线安装
+下方命令只下载 `v1.0.1` 的正式 Release。将第一行的标签替换为你要安装的正式版本；不要改为 `main`。
 
-管理员可下载同一 Release 中的 Marketplace ZIP 和对应 .sha256 文件，在离线环境核验后解压 ZIP。进入**解压后的包根目录**，运行：
+```powershell
+$tag = 'v1.0.1'
+$downloadDirectory = Join-Path $env:USERPROFILE 'Downloads\Paper-to-Journal-Club'
+$releaseBase = "https://github.com/jiuBABY6/paper-to-journal-club/releases/download/$tag"
+$scriptPath = Join-Path $downloadDirectory 'paper-to-journal-club-bootstrap.ps1'
+$checksumPath = "$scriptPath.sha256"
 
-~~~powershell
+New-Item -ItemType Directory -Path $downloadDirectory -Force | Out-Null
+Invoke-WebRequest -Uri "$releaseBase/paper-to-journal-club-bootstrap.ps1" -OutFile $scriptPath
+Invoke-WebRequest -Uri "$releaseBase/paper-to-journal-club-bootstrap.ps1.sha256" -OutFile $checksumPath
+
+$expected = ((Get-Content -LiteralPath $checksumPath -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
+$actual = (Get-FileHash -LiteralPath $scriptPath -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($actual -ne $expected) { throw '安装器 SHA-256 不匹配，已停止安装。' }
+
+powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File $scriptPath `
+  -RepositoryUrl 'https://github.com/jiuBABY6/paper-to-journal-club' `
+  -ReleaseTag $tag
+```
+
+### 📴 方式 4：离线 / 管理员安装
+
+1. 在可访问 GitHub 的设备上，从同一 Release 下载 Marketplace ZIP 及其 `.sha256` 文件。
+2. 校验 ZIP 的 SHA-256 后，将两者转移到离线 Windows 设备。
+3. 解压 ZIP，进入**解压后的包根目录**（该目录同时包含 `.agents` 与 `plugins`）。
+4. 在该目录运行：
+
+```powershell
 powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File ./install.ps1
-~~~
+```
 
-不要把 Codex Marketplace 指向 plugins/paper-to-journal-club 子目录；正确的根目录同时包含 .agents 和 plugins。
+不要把 Codex Marketplace 指向 `plugins/paper-to-journal-club` 子目录；必须使用同时含 `.agents` 和 `plugins` 的发行包根目录。
 
-### 第 2 步：重启 Codex，并打开 Microsoft PowerPoint
+### 🧰 高级排障：手工登记已验证的 Release 包
 
-安装完成后：
+仅当离线包已经完成 SHA-256 校验、且包内安装器无法调用 Codex CLI 时才使用本方式。**不要用开发分支或任意源码目录代替正式 Release 包。**
 
-1. 完全退出并重新打开 Codex；
-2. 新建一个任务；
-3. 打开准备查看或编辑的 **Microsoft PowerPoint 桌面版**。
+在已解压的正式 Release 包根目录中，先运行包内完整性验证，再手工登记：
 
-不需要预先新建演示文稿：插件会在后台创建一个新的 PPTX，不会覆盖你当前打开的演示文稿。仅支持 Windows Microsoft PowerPoint；不支持 WPS、macOS 或网页版 PowerPoint。
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File ./verify-release.ps1 `
+  -MarketplaceRoot (Get-Location).Path
 
-### 第 3 步：上传论文并复制提示词
+codex plugin marketplace add (Get-Location).Path
+codex plugin add paper-to-journal-club@paper-to-journal-club-tools
+```
 
-1. 将论文 PDF 放在“桌面”“文档”或“下载”目录，然后在 Codex 中上传该文件；
+这条路径仅供管理员排障；常规用户应使用方式 1、2 或 3，让安装器完成完整性校验和 PowerPoint 前置检查。
+
+## 🧭 安装后：第一次使用只需 3 步
+
+### 1. 🔄 完全重启 Codex
+
+安装结束后，完全退出并重新打开 Codex，然后新建一个任务。可选地在终端运行 `codex plugin list`，确认能看到 `paper-to-journal-club`。
+
+### 2. 📽️ 打开 Microsoft PowerPoint 桌面版
+
+打开准备查看或编辑的 PowerPoint。你不需要预先新建演示文稿：插件会在后台创建新的 PPTX，不会覆盖当前打开的演示文稿。
+
+### 3. 📄 上传论文并发送提示词
+
+1. 将论文 PDF 放在“桌面”“文档”或“下载”目录，再在 Codex 中上传该文件；
 2. 新建任务并粘贴下面的提示词；
-3. 先审阅插件输出的逐页提纲和证据，再确认生成 PowerPoint；
-4. 打开生成的 PPTX，结合预览图和质量报告进行最后核对。
+3. 先审阅逐页提纲和证据，再确认生成 PowerPoint；
+4. 打开生成的 PPTX，结合预览图和质量报告做最后核对。
 
-> **文件访问边界。** 为防止恶意论文或提示词诱导插件读取任意本机文件，插件默认只读写“桌面”“文档”“下载”及自身临时目录。若你的论文或输出必须存放在资料盘，请在**完全退出 Codex 前**将可信资料根写入当前 Windows 用户环境变量，然后重启 Codex：
+> 🔒 **文件访问边界：** 为防止恶意论文或提示词诱导插件读取任意本机文件，插件默认只读写“桌面”“文档”“下载”及自身临时目录。若论文或输出必须存放在资料盘，请在**完全退出 Codex 前**将可信资料根写入当前 Windows 用户环境变量，然后重启 Codex：
 >
-> ~~~powershell
+> ```powershell
 > [Environment]::SetEnvironmentVariable(
 >   'PAPER_TO_JOURNAL_CLUB_ALLOWED_ROOTS',
 >   'D:\Research;E:\SharedPapers',
 >   'User'
 > )
-> ~~~
+> ```
 >
-> 请只填确实存放论文/输出的窄目录；不要填写 `C:\`、整个用户目录或 `AppData`。Codex 的某些附件缓存路径可能不在默认目录内：遇到“approved user data directory”错误时，将论文另存到上述目录或配置资料根，而不是放宽到整个磁盘。
+> 只填写确实存放论文或输出的窄目录；不要填写 `C:\`、整个用户目录或 `AppData`。如果 Codex 的附件缓存不在默认目录而提示“approved user data directory”，请将论文另存到上述目录或配置资料根，而不是放宽到整个磁盘。
 
-~~~text
+```text
 [@paper-to-journal-club](plugin://paper-to-journal-club@paper-to-journal-club-tools)
 使用 Paper to Journal Club，将我上传的论文制作成一份 15 分钟中文组会汇报。
 必须包括：研究背景、创新点、研究方法、实验数据、局限性和未来研究方向。
@@ -154,19 +211,21 @@ powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File ./install.ps1
 在我确认提纲后，再新建后台 16:9 可编辑 PowerPoint。
 优先使用原生文本、形状、箭头、流程图和表格；仅把无法可靠重绘的原始科研图作为紧裁剪图片插入。
 完成后保存 PPTX，导出预览图，并重新打开文件进行质量审计。
-~~~
+```
 
-## 推荐工作流
+如果第一行插件命令没有被识别，请在 Codex 输入框的插件菜单中选择 **Paper to Journal Club**，再发送后续提示词。
 
-1. powerpoint_status：确认本机 PowerPoint COM、当前窗口状态和可用能力；
-2. analyse_paper：解析论文，得到章节、图号、证据和图片资产；
-3. design_journal_club_deck：生成六模块逐页故事线；
-4. 审阅提纲，并在需要时用 figure_asset_selection 显式选择已检查过的论文图片；
-5. audit_journal_club_deck：修复所有硬错误；
-6. generate_editable_pptx：保存到一个新的 PPTX 路径；
-7. audit_editable_pptx：重新打开文件并核对预览图与结构质量。
+## 🎬 推荐工作流
 
-## 编辑、导出与效果说明
+1. `powerpoint_status`：确认本机 PowerPoint COM、当前窗口状态和可用能力；
+2. `analyse_paper`：解析论文，得到章节、图号、证据和图片资产；
+3. `design_journal_club_deck`：生成六模块逐页故事线；
+4. 审阅提纲，并在需要时用 `figure_asset_selection` 显式选择已检查过的论文图片；
+5. `audit_journal_club_deck`：修复所有硬错误；
+6. `generate_editable_pptx`：保存到一个新的 PPTX 路径；
+7. `audit_editable_pptx`：重新打开文件并核对预览图与结构质量。
+
+## ✏️ 编辑、导出与效果说明
 
 生成后的 PPTX 可直接用 Microsoft PowerPoint 打开、编辑和另存为。常规内容会保留为原生对象：
 
@@ -175,37 +234,37 @@ powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File ./install.ps1
 - 表格、强调框和图注；
 - 原始科研图作为独立图片对象插入。
 
-插件优先保证“可编辑 + 可追溯”，而不是把整页扁平化为图片。复杂显微图、热图或论文原图本身仍可能以图片形式保留；这能避免虚构或错误重绘数据含义。
+插件优先保证“可编辑 + 可追溯”，而不是把整页扁平化为图片。复杂显微图、热图或论文原图本身仍可能以图片形式保留；这样可以避免虚构或错误重绘数据含义。
 
-## 重要限制
+## ⚠️ 重要限制
 
-- 论文候选结论默认可能标记为“需要复核”；汇报前必须核对原始文字、统计信息和因果表述；
+- 论文候选结论可能标记为“需要复核”；汇报前必须核对原始文字、统计信息和因果表述；
 - 缺失原文证据、缺失必备模块或来源不清的内容会阻止 PPT 生成；
 - 插件只控制 Windows 桌面版 Microsoft PowerPoint，不支持 WPS、macOS 或网页版 PowerPoint；
 - 请在上传论文、分享日志或发送演示稿前确认保密、版权和数据授权要求。
 
-## 常见问题与升级
+## 🧩 常见问题与升级
 
-**安装后在 Codex 中看不到插件。** 完整退出 Codex 并重新打开，然后新建一个任务。若仍未出现，请重新运行 Release 安装命令，并确认 Codex CLI 可以运行。
+**安装后在 Codex 中看不到插件？** 完整退出 Codex 并重新打开，然后新建任务。若仍未出现，请重新运行同一版本的 Release 安装命令，并确认 Codex CLI 可以运行。
 
-**提示找不到 PowerPoint。** 需要安装并至少启动一次 Microsoft PowerPoint 桌面版；网页版和 WPS 不提供本插件需要的 Windows COM 自动化接口。
+**提示找不到 PowerPoint？** 需要安装并至少启动一次 Microsoft PowerPoint 桌面版；网页版和 WPS 不提供本插件需要的 Windows COM 自动化接口。
 
-**企业策略阻止 PowerShell。** 安装器不会绕过企业安全策略。请让 IT 管理员审核 Release 哈希或部署经过 Authenticode 签名的版本。
+**企业策略阻止 PowerShell？** 安装器不会绕过企业安全策略。请让 IT 管理员审核 Release 哈希，或部署经过 Authenticode 签名的版本。
 
-**为什么提示 bundled PDF parser is unavailable。** 正式发行包应自带受验证的 `paper-parser.exe`。插件默认不会使用 Word 打开 PDF 作为自动回退，因为 Word COM 无法可靠终止卡住的恶意或损坏 PDF。维护者排障时才可在启动 Codex 前设置 `PAPER_TO_JOURNAL_CLUB_ALLOW_WORD_PDF_FALLBACK=1`；普通用户不应启用它。
+**为什么提示 `bundled PDF parser is unavailable`？** 正式发行包应自带受验证的 `paper-parser.exe`。插件默认不会使用 Word 打开 PDF 作为自动回退，因为 Word COM 无法可靠终止卡住的恶意或损坏 PDF。维护者排障时才可在启动 Codex 前设置 `PAPER_TO_JOURNAL_CLUB_ALLOW_WORD_PDF_FALLBACK=1`；普通用户不应启用它。
 
-**如何升级。** 从 Releases 页面选择新的固定版本标签，再次运行同一安装命令。安装器会保留此前的 current 版本目录，便于人工回退和排障。
+**如何升级？** 到 [Releases 页面](https://github.com/jiuBABY6/paper-to-journal-club/releases)选择新的固定版本标签，再运行同一安装命令并替换 `ReleaseTag`。安装器会保留此前的 `current` 版本目录，便于人工回退和排障。
 
-**需要反馈问题。** 请在 [GitHub Issues](https://github.com/jiuBABY6/paper-to-journal-club/issues) 提供插件版本、Windows/PowerPoint 版本和不含敏感论文内容的最小复现步骤。
+**需要反馈问题？** 请在 [GitHub Issues](https://github.com/jiuBABY6/paper-to-journal-club/issues) 提供插件版本、Windows/PowerPoint 版本，以及不含敏感论文内容的最小复现步骤。
 
-## 隐私与安全
+## 🔐 隐私与安全
 
 论文解析和 PowerPoint 自动化在本机完成；插件不运营独立的论文或演示稿上传服务器，也不会主动收集遥测。上传到 Codex 的论文、提示词和结果仍受你的 Codex、模型提供方及组织策略约束。详见 [PRIVACY.md](PRIVACY.md) 和 [SECURITY.md](SECURITY.md)。
 
-## 许可证
+## ⚖️ 许可证
 
 本项目采用 [MIT License](LICENSE)。第三方组件和许可证说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
-## 发布者与开发者
+## 🛠️ 发布与维护
 
-发布、版本标签、SHA-256、代码签名、离线部署与 GitHub Actions 的维护说明见 [PUBLISHING.md](PUBLISHING.md)。发布者应在正式发行前更新插件清单中的作者/开发者名称和支持渠道。
+发布、版本标签、SHA-256、代码签名、离线部署与 GitHub Actions 的维护说明见 [PUBLISHING.md](PUBLISHING.md)。
