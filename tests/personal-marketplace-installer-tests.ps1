@@ -64,8 +64,10 @@ try {
         "$payloadHash  *payload.txt",
         [System.Text.UTF8Encoding]::new($false)
     )
-    $verifiedChecksums = Test-Checksums -Root $checksumTestRoot
-    Assert-True -Condition ($verifiedChecksums -is [hashtable] -and $verifiedChecksums['payload.txt'] -eq $payloadHash) -Message '完整性检查必须返回经验证的 SHA-256 映射。'
+    $verifiedChecksumOutput = @(Test-Checksums -Root $checksumTestRoot)
+    Assert-True -Condition ($verifiedChecksumOutput.Count -eq 1 -and $verifiedChecksumOutput[0] -is [hashtable]) -Message '完整性检查必须以单个 Hashtable 返回经验证的 SHA-256 映射。'
+    $verifiedChecksums = $verifiedChecksumOutput[0]
+    Assert-True -Condition ($verifiedChecksums['payload.txt'] -eq $payloadHash) -Message '完整性检查返回的 SHA-256 映射内容不正确。'
 
     # 构造最小可复制插件树，并由安装器自身计算期望哈希表。
     $sourcePluginRoot = Join-Path $testRoot 'verified-release-plugin'
@@ -81,7 +83,19 @@ try {
         '# test',
         [System.Text.UTF8Encoding]::new($false)
     )
-    $expectedPluginChecksums = Get-DirectoryDigestMap -Root $sourcePluginRoot -Purpose '测试发行插件目录'
+    $directoryDigestOutput = @(Get-DirectoryDigestMap -Root $sourcePluginRoot -Purpose '测试发行插件目录')
+    Assert-True -Condition ($directoryDigestOutput.Count -eq 1 -and $directoryDigestOutput[0] -is [hashtable]) -Message '目录摘要必须以单个 Hashtable 返回。'
+    $expectedPluginChecksums = $directoryDigestOutput[0]
+
+    # 发行包清单到插件子树清单的转换也必须保持单一 Hashtable 契约，避免 pwsh 将
+    # IDictionary 枚举成多个管道对象后，复制阶段失去完整性约束。
+    $packageChecksumFixture = @{ 'README.md' = ('0' * 64) }
+    foreach ($relativePluginPath in $expectedPluginChecksums.Keys) {
+        $packageChecksumFixture["plugins/$PluginName/$relativePluginPath"] = $expectedPluginChecksums[$relativePluginPath]
+    }
+    $pluginChecksumOutput = @(Get-PluginChecksumMap -PackageChecksums $packageChecksumFixture)
+    Assert-True -Condition ($pluginChecksumOutput.Count -eq 1 -and $pluginChecksumOutput[0] -is [hashtable]) -Message '插件 SHA-256 子树映射必须以单个 Hashtable 返回。'
+    Assert-True -Condition ($pluginChecksumOutput[0].Count -eq $expectedPluginChecksums.Count) -Message '插件 SHA-256 子树映射缺少或包含额外文件。'
 
     # 清单确认后若源文件被替换，复制函数必须拒绝它，不能只比较“源和副本彼此相同”。
     $skillPath = Join-Path $sourcePluginRoot 'skills\demo\SKILL.md'

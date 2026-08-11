@@ -215,8 +215,9 @@ function Test-Checksums {
         }
     }
 
-    # 返回经校验的清单，供复制阶段继续核对，缩短“校验后被替换”的攻击窗口。
-    Write-Output -NoEnumerate $manifestEntries
+    # 一元逗号把 Hashtable 作为唯一的管道对象返回。不要依赖不同 PowerShell 版本对
+    # IDictionary / 输出流枚举的细微差异；后续复制阶段必须得到完整的 SHA-256 映射。
+    return ,$manifestEntries
 }
 
 function Get-ExistingPathAttributes {
@@ -395,7 +396,8 @@ function Get-DirectoryDigestMap {
             $files[$relativePath] = (Get-FileHash -LiteralPath $child.FullName -Algorithm SHA256).Hash.ToUpperInvariant()
         }
     }
-    return $files
+    # 与 Test-Checksums 保持同一返回契约：路径→哈希映射必须是单个 Hashtable。
+    return ,$files
 }
 
 function Assert-DirectoryCopyMatches {
@@ -452,7 +454,8 @@ function Get-PluginChecksumMap {
     if ($pluginChecksums.Count -eq 0) {
         throw '发行包 SHA-256 清单未包含插件文件。'
     }
-    Write-Output -NoEnumerate $pluginChecksums
+    # 插件子树映射也必须作为单个 Hashtable 返回，供复制前后的完整性比较使用。
+    return ,$pluginChecksums
 }
 
 function Assert-ManagedPersonalPluginRoot {

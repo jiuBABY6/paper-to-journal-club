@@ -64,6 +64,15 @@ jobs:
           & (Join-Path $env:GITHUB_WORKSPACE 'plugins/paper-to-journal-club/tests/content-template-tests.ps1')
           & (Join-Path $env:GITHUB_WORKSPACE 'plugins/paper-to-journal-club/tests/end-to-end-tests.ps1')
 
+      # 终端用户默认通过 Windows PowerShell 5.1 运行安装器；不要只在 Actions 默认的
+      # pwsh 中覆盖回归，避免集合输出、StrictMode 等跨宿主兼容性在发布后才暴露。
+      - name: 运行 Windows PowerShell 5.1 安装器兼容性回归
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & (Join-Path $env:GITHUB_WORKSPACE 'tests/install-layout-tests.ps1')
+          & (Join-Path $env:GITHUB_WORKSPACE 'tests/personal-marketplace-installer-tests.ps1')
+
       - name: 构建随包 PDF 解析器
         shell: pwsh
         run: |
