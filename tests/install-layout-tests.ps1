@@ -182,7 +182,12 @@ Assert-True -Condition (-not (Test-Path -LiteralPath $unusedDirectory)) -Message
 
 # CLI 自动安装失败时，包内安装器会回退为个人 Marketplace。根安装器不得因为该次原生命令
 # 遗留的非零 $LASTEXITCODE 把已经成功的回退误判为失败；只接受唯一的结构化最终结果。
-$previousLastExitCode = $global:LASTEXITCODE
+$hadPreviousLastExitCode = Test-Path -LiteralPath 'Variable:global:LASTEXITCODE'
+$previousLastExitCode = if ($hadPreviousLastExitCode) {
+    (Get-Variable -Name 'LASTEXITCODE' -Scope Global -ErrorAction Stop).Value
+} else {
+    $null
+}
 try {
     $dotSourceOutput = . $installPowerShellPath -RepositoryUrl 'https://github.com/test-owner/test-repository.git' -ReleaseTag 'v1.0.0' -InstallDirectory $unusedDirectory -WhatIf
     $global:LASTEXITCODE = 73
@@ -197,7 +202,13 @@ try {
     Assert-True -Condition ($simulatedFallback.installation_mode -eq 'personal-marketplace-fallback' -and $simulatedFallback.plugin_installed -eq $false -and $simulatedFallback.codex_cli_called -eq $true -and $global:LASTEXITCODE -eq 73) -Message 'CLI 失败后的个人 Marketplace 回退不得被残留的 LASTEXITCODE 误判为根安装器失败。'
     Assert-True -Condition ($installSource.Contains('ConvertFrom-PackageInstallerResult -Output $packageInstallerOutput') -and -not $installSource.Contains('包内安装器以退出码')) -Message '根安装器必须以结构化结果判断包内安装状态，不能检查包内脚本后的 LASTEXITCODE。'
 } finally {
-    $global:LASTEXITCODE = $previousLastExitCode
+    # 在干净的 GitHub Actions PowerShell 会话中，LASTEXITCODE 可能从未创建。
+    # 恢复原有状态，避免 StrictMode 下读取未初始化变量，也不污染后续测试。
+    if ($hadPreviousLastExitCode) {
+        Set-Variable -Name 'LASTEXITCODE' -Scope Global -Value $previousLastExitCode
+    } else {
+        Remove-Variable -Name 'LASTEXITCODE' -Scope Global -ErrorAction SilentlyContinue
+    }
 }
 
 # 安装目录即使尚未真正安装内容，也不能穿过 junction/symlink。此处使用实际 Junction
