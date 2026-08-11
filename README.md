@@ -69,7 +69,7 @@ Paper to Journal Club 运行在 Windows 本机：它先从论文构建可追溯�
 | ⌨️ 命令行下载并安装 | 熟悉 PowerShell 的用户 | 不需要打开浏览器，仍会校验 SHA-256。 |
 | 📴 离线安装 | 内网或受限网络环境 | 可在联网机器下载并核验后转移 ZIP。 |
 
-> 🧭 **安装器会自动选择最省事的安全路径。** 在你确认安装后，它会验证受信的 Codex CLI，并尝试自动完成安装；CLI 自身可能写入少量临时数据。只有 CLI 无法执行（例如 WindowsApps 显示“拒绝访问”）或自动安装失败且已确认回滚时，安装器才会安全回退到个人 Marketplace。若 CLI 已尝试登记但最终状态无法可靠确认，安装器会停止并报告错误，而不会擅自删除或覆盖你的配置。回退后完全重启 Codex，在 **Plugins Directory** 中点击一次 **Install** 即可；普通用户不需要在 PowerShell 中安装或手动调用 Codex CLI。
+> 🧭 **安装器会自动选择合适的安装方式。** 它会检查发布文件完整性并尝试自动安装；如果需要你完成额外操作，结果会明确告诉你重启 Codex 后的下一步。普通用户不需要安装或手动调用 Node.js、Python、.NET SDK 或 Codex CLI。
 
 ### 🤖 方式 1：把安装说明发送给 Codex（推荐）
 
@@ -79,12 +79,11 @@ Paper to Journal Club 运行在 Windows 本机：它先从论文构建可追溯�
 请安装 Paper to Journal Club：
 https://github.com/jiuBABY6/paper-to-journal-club
 
-请先读取该仓库的 GitHub Releases，选择最新的非草稿正式版本标签；如果没有正式 Release，请停止并告诉我，不要直接安装 main 或其他开发分支。
-下载该 Release 中的 paper-to-journal-club-bootstrap.ps1 及其同名 .sha256 文件，核验 SHA-256 一致后，使用明确的 ReleaseTag 运行安装器。
-在我确认安装后，安装器必须验证受信 Codex CLI 的实体路径和签名，并只使用已验证 CLI 的绝对路径在同一安装事务中查询 Marketplace、尝试自动完成 Paper to Journal Club 的安装；CLI 自身可能写入临时数据。若 CLI 不可执行、Marketplace 查询或自动安装失败且可确认回滚，请不要修改 WindowsApps 权限、不要反复调用失败的 CLI，而是自动部署到当前用户的个人 Marketplace；若 CLI 已尝试登记但最终状态无法可靠确认，请停止并明确报告错误，不要自动删除或回退未知配置。
+请先读取该仓库的 GitHub Releases，选择最新的非草稿、非预发布正式版本；如果没有正式 Release，请停止并告诉我，不要安装 main 或其他开发分支。
+请使用该 Release 中的官方 bootstrap 安装器完成安装，并校验发布文件完整性。
+如需下载文件或写入本机插件配置，请先向我说明并请求确认。不要使用 ExecutionPolicy Bypass。
 
-如果需要下载、自动安装、部署个人 Marketplace 或写入本机配置，请先向我说明并请求确认。
-不要使用 ExecutionPolicy Bypass。完成后报告实际采用的安装路径和版本：自动安装成功时提醒我完全重启 Codex；个人 Marketplace 回退时提醒我重启后在 Plugins Directory 中点击 Install。
+完成后告诉我实际安装的版本与结果，并提醒我完全重启 Codex。
 ```
 
 首次安装时，Codex 可能要求你确认网络访问、PowerShell 执行或本机配置写入；这是正常的安全确认。若 Codex 无法代为执行本机安装，请使用下面任一手动方式。
