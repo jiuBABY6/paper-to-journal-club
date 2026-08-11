@@ -1,7 +1,7 @@
 ﻿<#
   不联网的安装器布局回归测试。
 
-  此测试不下载 GitHub Release，也不启动 PowerPoint 或注册 Codex；它验证本地 Marketplace
+  此测试不下载 GitHub Release，也不启动 PowerPoint 或调用 Codex CLI；它验证本地 Marketplace
   根目录、GitHub 发布材料，以及 install.ps1 的 -WhatIf 安全路径。
 #>
 [CmdletBinding()]
@@ -50,8 +50,9 @@ $releaseToolPaths = @(
     (Join-Path $RepositoryRoot 'tools\Generate-ParserPackageLock.ps1'),
     (Join-Path $RepositoryRoot 'tools\INSTALL.md')
 )
+$personalMarketplaceInstallerTestPath = Join-Path $RepositoryRoot 'tests\personal-marketplace-installer-tests.ps1'
 
-foreach ($path in @($installPowerShellPath, $publishingPath, $globalJsonPath, $workflowPath, $lockWorkflowPath, $marketplacePath, (Join-Path $pluginRoot '.codex-plugin\plugin.json'), (Join-Path $pluginRoot '.mcp.json')) + $releaseToolPaths) {
+foreach ($path in @($installPowerShellPath, $publishingPath, $globalJsonPath, $workflowPath, $lockWorkflowPath, $marketplacePath, $personalMarketplaceInstallerTestPath, (Join-Path $pluginRoot '.codex-plugin\plugin.json'), (Join-Path $pluginRoot '.mcp.json')) + $releaseToolPaths) {
     Assert-FileExists -Path $path
 }
 
@@ -59,13 +60,15 @@ foreach ($path in @($installPowerShellPath, $publishingPath, $globalJsonPath, $w
 $installBytes = [System.IO.File]::ReadAllBytes($installPowerShellPath)
 Assert-True -Condition ($installBytes.Length -ge 3 -and $installBytes[0] -eq 0xEF -and $installBytes[1] -eq 0xBB -and $installBytes[2] -eq 0xBF) -Message 'install.ps1 必须采用 UTF-8 BOM 编码。'
 
-foreach ($scriptPath in @($installPowerShellPath) + @($releaseToolPaths | Where-Object { $_ -like '*.ps1' })) {
+foreach ($scriptPath in @($installPowerShellPath, $personalMarketplaceInstallerTestPath) + @($releaseToolPaths | Where-Object { $_ -like '*.ps1' })) {
     $tokens = $null
     $parseErrors = $null
     [void][System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$parseErrors)
     $parseErrorMessages = @($parseErrors | ForEach-Object { $_.Message })
     Assert-True -Condition ($parseErrorMessages.Count -eq 0) -Message ("$scriptPath 存在 PowerShell 语法错误：{0}" -f ($parseErrorMessages -join '; '))
 }
+$personalInstallerTestBytes = [System.IO.File]::ReadAllBytes($personalMarketplaceInstallerTestPath)
+Assert-True -Condition ($personalInstallerTestBytes.Length -ge 3 -and $personalInstallerTestBytes[0] -eq 0xEF -and $personalInstallerTestBytes[1] -eq 0xBB -and $personalInstallerTestBytes[2] -eq 0xBF) -Message '个人 Marketplace 安装器回归测试必须采用 UTF-8 BOM 编码。'
 
 $marketplace = Get-Content -LiteralPath $marketplacePath -Raw -Encoding UTF8 | ConvertFrom-Json
 Assert-True -Condition ($marketplace.name -eq $marketplaceName) -Message 'Marketplace 名称不正确。'
@@ -91,22 +94,56 @@ Assert-True -Condition ($pluginManifest.skills -eq './skills/' -and $pluginManif
 Assert-True -Condition (@($pluginManifest.interface.PSObject.Properties.Name | Sort-Object) -join ',' -ceq 'capabilities,category,defaultPrompt,developerName,displayName,longDescription,shortDescription') -Message 'plugin.json interface 字段必须为严格允许清单。'
 
 $installSource = [System.IO.File]::ReadAllText($installPowerShellPath, [System.Text.UTF8Encoding]::new($true))
+$packageInstallerPath = Join-Path $RepositoryRoot 'tools\Install-PaperToJournalClub.ps1'
+$packageInstallerSource = [System.IO.File]::ReadAllText($packageInstallerPath, [System.Text.UTF8Encoding]::new($true))
+$allInstallerSource = "$installSource`n$packageInstallerSource"
 Assert-True -Condition ($installSource -match 'RepositoryUrl' -and $installSource -match 'ReleaseTag' -and $installSource -match 'SupportsShouldProcess') -Message 'install.ps1 必须要求仓库地址和固定 Release 标签，并支持 -WhatIf。'
 Assert-True -Condition ($installSource -notmatch '(?i)ExecutionPolicy\s+Bypass') -Message 'install.ps1 不得引入 ExecutionPolicy Bypass。'
 foreach ($requiredFragment in @('Test-ChecksumManifest', 'Assert-SafeZipArchive', 'Expand-SafeZipArchive', 'Assert-AllowedMarketplaceAndMcpConfiguration', 'MaximumExpandedBytes')) {
     Assert-True -Condition ($installSource.Contains($requiredFragment)) -Message "install.ps1 缺少发行链安全检查：$requiredFragment"
 }
 Assert-True -Condition ($installSource -notmatch '(?m)^\s*Expand-Archive\b') -Message 'install.ps1 不得绕过受限 ZIP 解压器直接调用 Expand-Archive。'
+# 正常路径应保持零摩擦自动安装；用户确认后验证受信 CLI 并查询可验证的事务状态，
+# 失败时才回退到个人 Marketplace。不要用 `--help`/`--version` 伪装无写入探针：
+# 某些 Codex CLI 版本会为这些命令创建自身的临时数据。
+foreach ($requiredFragment in @(
+    'Get-ExecutableCodexCliPath',
+    'Test-TrustedCodexCliSignature',
+    'System.Diagnostics.ProcessStartInfo',
+    'Get-CodexMarketplaceInventory',
+    'Test-CodexMarketplaceEntryMatchesRoot',
+    'Try-InstallWithCodexCli',
+    'Write-InstallationResult'
+)) {
+    Assert-True -Condition ($allInstallerSource.Contains($requiredFragment)) -Message "安装器缺少受信 CLI 自动安装事务步骤：$requiredFragment"
+}
+Assert-True -Condition ($allInstallerSource -match '(?is)plugin.{0,120}marketplace.{0,120}list.{0,120}--json') -Message '安装器必须通过 CLI Marketplace JSON 查询验证事务状态。'
+Assert-True -Condition ($allInstallerSource -match "(?is)plugin.{0,120}marketplace.{0,120}remove") -Message 'CLI 自动安装失败时，安装器必须具备移除本次 Marketplace 注册的回滚路径。'
+Assert-True -Condition ($allInstallerSource -notmatch "(?is)'--help'|'--version'") -Message '安装器不得以可能写入临时数据的 --help 或 --version 作为能力探针。'
+Assert-True -Condition ($packageInstallerSource -match '(?is)\$startInfo\.FileName\s*=\s*\$ExecutablePath' -and $packageInstallerSource.Contains('Invoke-CodexCliCommand')) -Message '安装器必须通过已解析的绝对 CLI 路径启动受信可执行文件，不能依赖裸命令名。'
+Assert-True -Condition ($allInstallerSource.Contains('Get-AuthenticodeSignature') -and $allInstallerSource -match '(?i)OpenAI') -Message '安装器不得自动执行未验证签发者的 CLI；候选 CLI 必须通过 OpenAI Authenticode 校验。'
+Assert-True -Condition ($allInstallerSource -match '(?is)(fallback|回退).{0,300}(personal|个人).{0,300}marketplace') -Message '安装器必须在 CLI 不可用时提供个人 Marketplace 回退。'
+Assert-True -Condition ($packageInstallerSource.Contains('Deploy-VerifiedPluginCopy') -and $packageInstallerSource.Contains('Update-PersonalMarketplaceFile') -and $packageInstallerSource -match '\./\.codex/plugins/\$PluginName') -Message '包内安装器必须安全部署个人 Marketplace 回退副本。'
+Assert-True -Condition ($allInstallerSource -notmatch '(?im)^\s*codex(?:\.exe)?\s+plugin\b') -Message '安装器不得用裸 codex 命令调用插件操作。'
+Assert-True -Condition ($allInstallerSource -notmatch '(?i)C:\\Program Files\\WindowsApps|Join-Path.{0,120}WindowsApps') -Message '安装器不得硬编码或直接执行 WindowsApps 路径。'
+Assert-True -Condition ($allInstallerSource -notmatch '(?is)(Set-Content|Add-Content|Out-File|WriteAllText).{0,200}config\.toml') -Message '安装器不得手工写入 config.toml。'
 
 $publishingSource = Get-Content -LiteralPath $publishingPath -Raw -Encoding UTF8
 Assert-True -Condition ($publishingSource -match '\.zip\.sha256' -and $publishingSource -match 'bootstrap\.ps1' -and $publishingSource -match 'RemoteSigned') -Message 'PUBLISHING.md 必须说明外部 SHA-256、引导安装器与 RemoteSigned。'
+$readmeSource = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'README.md') -Raw -Encoding UTF8
+$installGuideSource = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'tools\INSTALL.md') -Raw -Encoding UTF8
+foreach ($documentSource in @($readmeSource, $publishingSource, $installGuideSource)) {
+    Assert-True -Condition ($documentSource -match '(?is)(验证受信|受信.{0,80}CLI|CLI.{0,80}验证).{0,900}自动安装') -Message '安装文档必须说明验证受信 CLI 后的自动安装路径。'
+    Assert-True -Condition ($documentSource -match '(?is)(不可执行|拒绝访问|自动安装失败).{0,900}(个人.{0,80}Marketplace|Plugins Directory)') -Message '安装文档必须说明 CLI 失败时的个人 Marketplace 回退。'
+    Assert-True -Condition ($documentSource -match '临时数据' -and $documentSource -match '回滚') -Message '安装文档必须如实说明 CLI 临时数据与失败回滚。'
+}
 
 # 托管运行器可能同时预装多个 SDK；global.json 是所有脚本和工作流共享的 SDK 信任锚。
 $globalSdk = Get-Content -LiteralPath $globalJsonPath -Raw -Encoding UTF8 | ConvertFrom-Json
 Assert-True -Condition ($globalSdk.sdk.version -eq '8.0.418' -and $globalSdk.sdk.rollForward -eq 'disable' -and $globalSdk.sdk.allowPrerelease -eq $false) -Message 'global.json 必须精确固定 .NET SDK 8.0.418，且禁止自动滚动升级。'
 
 $workflowSource = Get-Content -LiteralPath $workflowPath -Raw -Encoding UTF8
-foreach ($requiredFragment in @('actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5', 'actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9', 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02', 'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093', 'Get-FileHash', 'bootstrap.ps1', 'gh release create')) {
+foreach ($requiredFragment in @('actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5', 'actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9', 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02', 'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093', 'Get-FileHash', 'bootstrap.ps1', 'personal-marketplace-installer-tests.ps1', 'gh release create')) {
     Assert-True -Condition ($workflowSource.Contains($requiredFragment)) -Message "release.yml 缺少预期发布步骤：$requiredFragment"
 }
 Assert-True -Condition ($workflowSource.Contains('tools/Build-ReleasePackage.ps1')) -Message 'release.yml 必须调用 tools/Build-ReleasePackage.ps1。'
@@ -140,8 +177,28 @@ foreach ($restoreSource in @($parserBuildSource, $lockGeneratorSource)) {
 $unusedDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ("paper-to-journal-club-install-test-{0}" -f [Guid]::NewGuid().ToString('N'))
 $whatIfOutput = & $installPowerShellPath -RepositoryUrl 'https://github.com/test-owner/test-repository.git' -ReleaseTag 'v1.0.0' -InstallDirectory $unusedDirectory -WhatIf
 $whatIf = $whatIfOutput | ConvertFrom-Json
-Assert-True -Condition ($whatIf.pass -eq $true -and $whatIf.action -eq 'would-download-and-install-release' -and $whatIf.node_required -eq $false) -Message 'install.ps1 的 -WhatIf 输出不符合预期。'
+Assert-True -Condition ($whatIf.pass -eq $true -and [string]$whatIf.action -match '^would-download' -and $whatIf.node_required -eq $false) -Message 'install.ps1 的 -WhatIf 输出不符合安全安装预期。'
 Assert-True -Condition (-not (Test-Path -LiteralPath $unusedDirectory)) -Message '-WhatIf 不得创建安装目录。'
+
+# CLI 自动安装失败时，包内安装器会回退为个人 Marketplace。根安装器不得因为该次原生命令
+# 遗留的非零 $LASTEXITCODE 把已经成功的回退误判为失败；只接受唯一的结构化最终结果。
+$previousLastExitCode = $global:LASTEXITCODE
+try {
+    $dotSourceOutput = . $installPowerShellPath -RepositoryUrl 'https://github.com/test-owner/test-repository.git' -ReleaseTag 'v1.0.0' -InstallDirectory $unusedDirectory -WhatIf
+    $global:LASTEXITCODE = 73
+    $simulatedFallbackJson = [pscustomobject]@{
+        pass = $true
+        installation_mode = 'personal-marketplace-fallback'
+        plugin_installed = $false
+        codex_cli_called = $true
+        next_step = 'restart-codex-then-install-from-plugins-directory'
+    } | ConvertTo-Json -Compress
+    $simulatedFallback = ConvertFrom-PackageInstallerResult -Output @($simulatedFallbackJson)
+    Assert-True -Condition ($simulatedFallback.installation_mode -eq 'personal-marketplace-fallback' -and $simulatedFallback.plugin_installed -eq $false -and $simulatedFallback.codex_cli_called -eq $true -and $global:LASTEXITCODE -eq 73) -Message 'CLI 失败后的个人 Marketplace 回退不得被残留的 LASTEXITCODE 误判为根安装器失败。'
+    Assert-True -Condition ($installSource.Contains('ConvertFrom-PackageInstallerResult -Output $packageInstallerOutput') -and -not $installSource.Contains('包内安装器以退出码')) -Message '根安装器必须以结构化结果判断包内安装状态，不能检查包内脚本后的 LASTEXITCODE。'
+} finally {
+    $global:LASTEXITCODE = $previousLastExitCode
+}
 
 # 安装目录即使尚未真正安装内容，也不能穿过 junction/symlink。此处使用实际 Junction
 # 验证 -WhatIf 会在访问网络或创建文件前拒绝它；清理时先删除链接本身，绝不递归跟随链接。

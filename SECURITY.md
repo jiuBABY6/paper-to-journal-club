@@ -13,6 +13,7 @@
 - GitHub Release 工作流将第三方 Actions 固定到完整提交 SHA、禁止 checkout 持久化令牌，并拒绝覆写已经存在的 Release；
 - 对公开或企业分发，建议使用可信代码签名证书签署 EXE 和 PowerShell 脚本，并由发布者在独立发布页公布签名和哈希；
 - 不要在未经审阅的目录中执行 `install.ps1`；
+- 安装器只会在当前 Windows 用户目录下部署已校验的插件副本。在用户确认后，它会验证受信 Codex CLI 的实体路径和签名；随后仅在同一安装事务中，才通过已验证的绝对路径查询 Marketplace 并尝试自动调用该 CLI。CLI 自身可能写入临时数据。若 CLI 不可执行、Marketplace 查询失败、WindowsApps 拒绝访问或自动安装失败，安装器会回滚本次 Marketplace 注册，停止调用失败的 CLI 并回退到个人 Marketplace；它不修改 WindowsApps 权限，也不修改 `%USERPROFILE%\.codex\config.toml` 来伪造插件启用状态；
 - 论文、PPTX、预览和临时资产路径默认只能位于“桌面”“文档”“下载”或插件专用临时目录；需要资料盘时，只能在启动 Codex 前通过 `PAPER_TO_JOURNAL_CLUB_ALLOWED_ROOTS` 声明必要的窄目录，切勿将 `C:\`、整个用户目录或 `AppData` 作为允许根；
 - `paper-parser.exe` 缺失时，Word PDF COM 回退默认关闭；它只有在启动 Codex 前显式设置 `PAPER_TO_JOURNAL_CLUB_ALLOW_WORD_PDF_FALLBACK=1` 时才会启用，因为该回退无法可靠终止卡住的恶意或损坏 PDF；
 - 不要将含未公开研究数据、个人信息或凭据的论文和日志公开分享；

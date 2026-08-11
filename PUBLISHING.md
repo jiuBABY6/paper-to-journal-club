@@ -2,7 +2,7 @@
 
 Paper to Journal Club 是一个 **Windows 本地 Codex Marketplace 插件**：运行时由本机 PowerShell MCP 通过 COM 控制已安装的 Microsoft PowerPoint。它不是公网 MCP 服务，也不需要 Node.js、npm、Python、Git 或 .NET SDK 才能让普通用户使用。
 
-本目录本身就是 Marketplace 根目录：
+本目录是**源码与发行包布局**；它供 GitHub Actions 构建正式 Release 使用，终端用户不应直接把克隆的源码目录当作个人 Marketplace：
 
 ```text
 paper-to-journal-club/
@@ -23,13 +23,24 @@ paper-to-journal-club/
 - 用于最终质量验收的 Windows 桌面版 Microsoft PowerPoint；
 - 可选但强烈建议：组织代码签名证书。
 
-终端用户不需要上述构建依赖，只需要 Windows x64、桌面版 Microsoft PowerPoint 和 Codex 桌面版/CLI。
+终端用户不需要上述构建依赖，只需要 Windows x64、桌面版 Microsoft PowerPoint 和 Codex 桌面版。
+
+## 终端用户安装分支
+
+正式 Release 的安装器默认追求与 Codex 内置安装相同的零摩擦体验，而不是要求用户预先安装或手动运行 Codex CLI：
+
+1. 在用户确认安装后，验证受信 CLI 的实体路径和签名；随后只在同一安装事务中通过该绝对路径查询 Marketplace 并尝试自动安装。CLI 自身可能写入少量临时数据，因此不得将该阶段宣传为“无写入”；
+2. Marketplace 查询和自动安装均成功时，只通过已验证的绝对可执行路径完成 Marketplace 注册和插件安装；
+3. 若 CLI 不可执行、Marketplace 查询失败、WindowsApps 返回“拒绝访问”或自动安装失败，安装器只在能确认本次登记已不存在或已精确回滚时，才将已校验插件部署到当前用户的个人 Marketplace；若 CLI 已尝试登记但最终状态无法可靠确认，安装器会 fail-closed 并停止，不会擅自删除或覆盖未知用户配置；
+4. 仅在第 3 种回退情形，用户才需要完全重启 Codex，并在 **Plugins Directory** 的个人 Marketplace 中点击 **Install**。
+
+因此，个人 Marketplace 是兼容性回退，不应在 README 中被描述成每位用户都必须额外点击的默认安装步骤。安装器的最终结果必须如实报告采用的是“自动安装”还是“个人 Marketplace 回退”。
 
 ## GitHub Release 构建流程
 
 1. 更新 `plugins/paper-to-journal-club/.codex-plugin/plugin.json` 中的严格 SemVer 版本号。
 2. 在干净的 Windows 环境中运行插件测试和发行包验证；没有本机 .NET SDK 时，先在 GitHub **Actions → 发布 Paper to Journal Club 本地 Marketplace → Run workflow** 中选择 `main` 运行手动预检。该预检会完整构建解析器、生成并离线验证 ZIP，但只上传临时 Actions 工件，**不会创建或修改 GitHub Release**。
-3. 预检全绿后，创建与清单版本严格对应的 Git 标签，例如当前清单为 `1.0.1` 时，标签必须为 `v1.0.1`。
+3. 预检全绿后，创建与清单版本严格对应的 Git 标签，例如当前清单为 `1.0.2` 时，标签必须为 `v1.0.2`。
 4. 推送该标签。`release.yml` 会构建 PDF 解析器、创建本地 Marketplace ZIP、生成 ZIP 的外部 SHA-256 文件，并创建同名 GitHub Release。
 
 工作流固定 `actions/checkout` 与 `actions/setup-dotnet` 到完整提交 SHA，禁用 checkout 凭据持久化。构建/打包 job 仅有 `contents: read`，它只把四个已校验的最终资产交给独立的发布 job；后者不执行仓库源码，才获得创建 Release 所需的 `contents: write` 权限。SDK 也固定为 `8.0.418`。同一标签若已有 Release，工作流会失败，**绝不会**用 `--clobber` 覆写旧资产；修复必须发布新版本并使用新标签。
@@ -109,20 +120,17 @@ powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\paper-to-journal
    %LOCALAPPDATA%\Codex\marketplaces\paper-to-journal-club\current
    ```
 
-5. 调用包内安装器执行离线结构校验、PowerPoint 前置检查，并运行：
-
-   ```text
-   codex plugin marketplace add <本地 Marketplace 根目录>
-   codex plugin add paper-to-journal-club@paper-to-journal-club-tools
-   ```
+5. 调用包内安装器执行离线结构校验和 PowerPoint 前置检查，再在用户确认后验证受信 CLI 的实体路径和签名；该 CLI 可能写入自身临时数据；
+6. 安装器在同一安装事务中通过已验证的绝对 CLI 路径查询 Marketplace 并尝试自动完成安装。用户完全重启 Codex 后即可新建任务；
+7. Marketplace 查询或自动安装未通过时，安装器仅在确认本次登记不存在或已精确回滚后，才部署受验证的插件副本到当前用户的个人 Marketplace，并安全更新其 Marketplace 条目。若登记最终状态无法可靠确认，安装器会停止而非处理未知配置。用户完全重启 Codex 后，在 **Plugins Directory** 中点击 **Install**。这一路径不修改 WindowsApps 权限，也不手改 `config.toml` 来伪造插件启用状态。
 
 升级时使用新的固定 Release 标签再次运行同一命令。安装器不会删除旧版本：会把旧的 `current` 目录保留为 `previous-...`，以便排障或人工回退。
 
 ## 离线或受管网络安装
 
-如果单位不允许安装器访问 GitHub API，管理员可以从已验证的 GitHub Release 下载 ZIP 和对应 `.sha256` 文件，在离线环境校验 SHA-256 后解压。随后在 **解压包根目录** 中运行包内的 `install.ps1`。
+如果单位不允许安装器访问 GitHub API，管理员或普通用户都可以从已验证的 GitHub Release 下载 ZIP 和对应 `.sha256` 文件，在离线环境校验 SHA-256 后解压。随后在 **解压包根目录** 中运行包内的 `install.ps1`。
 
-不要把 Marketplace 根目录指向 `plugins/paper-to-journal-club`；正确的根目录同时包含 `.agents` 和 `plugins` 两个目录。
+离线安装同样在用户确认后验证受信 CLI 的实体路径和签名，并在安装事务中查询 Marketplace、尝试自动安装；只有 CLI 不可用、Marketplace 查询或自动安装失败且能确认本次登记不存在或已精确回滚时，才会部署个人 Marketplace。登记最终状态无法可靠确认时会停止。解压包根目录仅用于完整性验证和部署；不要手改 `%USERPROFILE%\.codex\config.toml` 来伪造已安装状态。
 
 ## RemoteSigned、下载标记与代码签名
 
@@ -159,10 +167,4 @@ powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\install.ps1 `
   -WhatIf
 ```
 
-如只想下载、解压并验证包结构而暂不注册到 Codex，可在真实安装命令中追加：
-
-```powershell
--SkipCodexInstall -SkipPowerPointCheck
-```
-
-这些开关仅适合 CI、维护者排障或管理员预部署；普通科研用户应保留默认检查，并在安装后重启 Codex、开启一个新任务再调用插件。
+维护者若只想做发行验证，应使用本仓库的离线测试和 GitHub Actions 预检；普通科研用户不应添加跳过安装分支、PowerPoint 检查或完整性校验的参数。无论自动安装还是个人 Marketplace 回退，安装后都应重启 Codex，再开启一个新任务调用插件。

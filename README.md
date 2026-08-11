@@ -55,7 +55,7 @@ Paper to Journal Club 运行在 Windows 本机：它先从论文构建可追溯�
 |---|---|
 | 🪟 64 位 Windows | 当前仅支持 Windows。 |
 | 📽️ Microsoft PowerPoint 桌面版 | 已安装且至少成功启动过一次。 |
-| 🤖 Codex 桌面版或 Codex CLI | 用于安装和调用本地 Marketplace。 |
+| 🤖 Codex 桌面版 | 用于浏览个人 Marketplace、安装并调用插件。 |
 | 🌐 GitHub Release 网络访问 | 仅在在线安装或升级时需要。 |
 
 不支持 macOS、网页版 PowerPoint 或 WPS 演示。普通用户不需要 Git、Node.js、npm、Python 或 .NET SDK。
@@ -67,7 +67,9 @@ Paper to Journal Club 运行在 Windows 本机：它先从论文构建可追溯�
 | 🤖 让 Codex 安装 | 大多数用户 | 最省事；Codex 会在操作前请求确认。 |
 | 🔐 从 Release 手动安装 | 希望逐项核验的用户 | 先比对脚本 SHA-256，再运行固定版本安装器。 |
 | ⌨️ 命令行下载并安装 | 熟悉 PowerShell 的用户 | 不需要打开浏览器，仍会校验 SHA-256。 |
-| 📴 离线安装 | 管理员、内网或受限网络环境 | 可在联网机器下载并核验后转移 ZIP。 |
+| 📴 离线安装 | 内网或受限网络环境 | 可在联网机器下载并核验后转移 ZIP。 |
+
+> 🧭 **安装器会自动选择最省事的安全路径。** 在你确认安装后，它会验证受信的 Codex CLI，并尝试自动完成安装；CLI 自身可能写入少量临时数据。只有 CLI 无法执行（例如 WindowsApps 显示“拒绝访问”）或自动安装失败且已确认回滚时，安装器才会安全回退到个人 Marketplace。若 CLI 已尝试登记但最终状态无法可靠确认，安装器会停止并报告错误，而不会擅自删除或覆盖你的配置。回退后完全重启 Codex，在 **Plugins Directory** 中点击一次 **Install** 即可；普通用户不需要在 PowerShell 中安装或手动调用 Codex CLI。
 
 ### 🤖 方式 1：把安装说明发送给 Codex（推荐）
 
@@ -79,18 +81,17 @@ https://github.com/jiuBABY6/paper-to-journal-club
 
 请先读取该仓库的 GitHub Releases，选择最新的非草稿正式版本标签；如果没有正式 Release，请停止并告诉我，不要直接安装 main 或其他开发分支。
 下载该 Release 中的 paper-to-journal-club-bootstrap.ps1 及其同名 .sha256 文件，核验 SHA-256 一致后，使用明确的 ReleaseTag 运行安装器。
-安装器会下载并再次核验 Marketplace 发行包，将其根目录（含 .agents 和 plugins）注册为 Codex Marketplace，然后安装
-paper-to-journal-club@paper-to-journal-club-tools。
+在我确认安装后，安装器必须验证受信 Codex CLI 的实体路径和签名，并只使用已验证 CLI 的绝对路径在同一安装事务中查询 Marketplace、尝试自动完成 Paper to Journal Club 的安装；CLI 自身可能写入临时数据。若 CLI 不可执行、Marketplace 查询或自动安装失败且可确认回滚，请不要修改 WindowsApps 权限、不要反复调用失败的 CLI，而是自动部署到当前用户的个人 Marketplace；若 CLI 已尝试登记但最终状态无法可靠确认，请停止并明确报告错误，不要自动删除或回退未知配置。
 
-如果需要下载、注册 Marketplace 或写入本机配置，请先向我说明并请求确认。
-不要使用 ExecutionPolicy Bypass。完成后报告实际安装的版本，并提醒我完全重启 Codex。
+如果需要下载、自动安装、部署个人 Marketplace 或写入本机配置，请先向我说明并请求确认。
+不要使用 ExecutionPolicy Bypass。完成后报告实际采用的安装路径和版本：自动安装成功时提醒我完全重启 Codex；个人 Marketplace 回退时提醒我重启后在 Plugins Directory 中点击 Install。
 ```
 
 首次安装时，Codex 可能要求你确认网络访问、PowerShell 执行或本机配置写入；这是正常的安全确认。若 Codex 无法代为执行本机安装，请使用下面任一手动方式。
 
 ### 🔐 方式 2：浏览器下载 Release 安装器
 
-1. 打开 [Releases 页面](https://github.com/jiuBABY6/paper-to-journal-club/releases)，选择一个固定的正式版本，例如 `v1.0.1`。
+1. 打开 [Releases 页面](https://github.com/jiuBABY6/paper-to-journal-club/releases)，选择一个固定的正式版本，例如 `v1.0.2`。
 2. 下载同一 Release 中的：
 
    - `paper-to-journal-club-bootstrap.ps1`
@@ -103,28 +104,33 @@ Get-FileHash -LiteralPath ./paper-to-journal-club-bootstrap.ps1 -Algorithm SHA25
 Get-Content -LiteralPath ./paper-to-journal-club-bootstrap.ps1.sha256
 ```
 
-4. 确认两处 SHA-256 一致后运行。以下以 `v1.0.1` 为例；安装新版时只替换标签：
+4. 确认两处 SHA-256 一致后运行。以下以 `v1.0.2` 为例；安装新版时只替换标签：
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File ./paper-to-journal-club-bootstrap.ps1 `
   -RepositoryUrl 'https://github.com/jiuBABY6/paper-to-journal-club' `
-  -ReleaseTag 'v1.0.1'
+  -ReleaseTag 'v1.0.2'
 ```
 
-安装器会再次校验 Marketplace ZIP、检查 PowerPoint、注册本地 Marketplace 并安装插件。默认安装目录为：
+安装器会再次校验 Marketplace ZIP、检查 PowerPoint，然后验证受信 Codex CLI 并尝试自动安装。发行包缓存目录为：
 
 ```text
 %LOCALAPPDATA%\Codex\marketplaces\paper-to-journal-club\current
 ```
 
+运行结果会明确告诉你下一步：
+
+- **自动安装成功**：完全退出并重新打开 Codex，再新建一个任务；不需要手动打开插件目录。
+- **个人 Marketplace 回退**：完全退出并重新打开 Codex，打开 **Plugins Directory**，选择个人 Marketplace，点击 **Paper to Journal Club → Install**，再新建一个任务。
+
 > 🛡️ 如果企业策略标记了已核验的下载脚本，请在确认 Release 来源与 SHA-256 后执行 `Unblock-File -LiteralPath ./paper-to-journal-club-bootstrap.ps1`。不要使用 `ExecutionPolicy Bypass`，也不要对来源不明的文件解除阻止。
 
 ### ⌨️ 方式 3：用 PowerShell 下载、校验并安装固定版本
 
-下方命令只下载 `v1.0.1` 的正式 Release。将第一行的标签替换为你要安装的正式版本；不要改为 `main`。
+下方命令只下载 `v1.0.2` 的正式 Release。将第一行的标签替换为你要安装的正式版本；不要改为 `main`。
 
 ```powershell
-$tag = 'v1.0.1'
+$tag = 'v1.0.2'
 $downloadDirectory = Join-Path $env:USERPROFILE 'Downloads\Paper-to-Journal-Club'
 $releaseBase = "https://github.com/jiuBABY6/paper-to-journal-club/releases/download/$tag"
 $scriptPath = Join-Path $downloadDirectory 'paper-to-journal-club-bootstrap.ps1'
@@ -143,7 +149,7 @@ powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File $scriptPath `
   -ReleaseTag $tag
 ```
 
-### 📴 方式 4：离线 / 管理员安装
+### 📴 方式 4：离线 / 受限网络安装
 
 1. 在可访问 GitHub 的设备上，从同一 Release 下载 Marketplace ZIP 及其 `.sha256` 文件。
 2. 校验 ZIP 的 SHA-256 后，将两者转移到离线 Windows 设备。
@@ -154,29 +160,16 @@ powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File $scriptPath `
 powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File ./install.ps1
 ```
 
-不要把 Codex Marketplace 指向 `plugins/paper-to-journal-club` 子目录；必须使用同时含 `.agents` 和 `plugins` 的发行包根目录。
-
-### 🧰 高级排障：手工登记已验证的 Release 包
-
-仅当离线包已经完成 SHA-256 校验、且包内安装器无法调用 Codex CLI 时才使用本方式。**不要用开发分支或任意源码目录代替正式 Release 包。**
-
-在已解压的正式 Release 包根目录中，先运行包内完整性验证，再手工登记：
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File ./verify-release.ps1 `
-  -MarketplaceRoot (Get-Location).Path
-
-codex plugin marketplace add (Get-Location).Path
-codex plugin add paper-to-journal-club@paper-to-journal-club-tools
-```
-
-这条路径仅供管理员排障；常规用户应使用方式 1、2 或 3，让安装器完成完整性校验和 PowerPoint 前置检查。
+离线安装器也会在你确认后验证受信 CLI 并尝试自动安装；CLI 不可执行或自动安装失败且可确认回滚时，会回退到个人 Marketplace。若 CLI 已尝试登记但最终状态无法可靠确认，安装器会停止而不是擅自处理未知配置。解压后的包根目录只用于运行包内 `install.ps1` 和完整性验证；不要手动修改 Codex 配置或 WindowsApps 权限。
 
 ## 🧭 安装后：第一次使用只需 3 步
 
 ### 1. 🔄 完全重启 Codex
 
-安装结束后，完全退出并重新打开 Codex，然后新建一个任务。可选地在终端运行 `codex plugin list`，确认能看到 `paper-to-journal-club`。
+安装结束后，完全退出并重新打开 Codex：
+
+- 若安装结果显示“自动安装成功”，直接新建一个任务；
+- 若安装结果显示“个人 Marketplace 回退”，打开 **Plugins Directory**，选择个人 Marketplace，找到 **Paper to Journal Club** 并点击 **Install**，再新建一个任务。
 
 ### 2. 📽️ 打开 Microsoft PowerPoint 桌面版
 
@@ -245,7 +238,9 @@ codex plugin add paper-to-journal-club@paper-to-journal-club-tools
 
 ## 🧩 常见问题与升级
 
-**安装后在 Codex 中看不到插件？** 完整退出 Codex 并重新打开，然后新建任务。若仍未出现，请重新运行同一版本的 Release 安装命令，并确认 Codex CLI 可以运行。
+**安装后在 Codex 中看不到插件？** 先查看安装器最后的结果：若显示“自动安装成功”，完全重启 Codex 后直接新建任务；若显示“个人 Marketplace 回退”，在 **Plugins Directory** 的个人 Marketplace 中点击 Install。若仍未出现，请重新运行同一版本的 Release 安装命令。
+
+**结果显示 CLI 不可执行或 WindowsApps 拒绝访问？** 这是安装器触发个人 Marketplace 回退的条件，不表示发行包校验失败。不要修改 WindowsApps 权限、不要用管理员权限强行执行；完全重启 Codex 后，在 **Plugins Directory** 的个人 Marketplace 中点击 Install 即可。
 
 **提示找不到 PowerPoint？** 需要安装并至少启动一次 Microsoft PowerPoint 桌面版；网页版和 WPS 不提供本插件需要的 Windows COM 自动化接口。
 

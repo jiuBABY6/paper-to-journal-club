@@ -3,7 +3,9 @@
 
   此脚本不克隆开发仓库，也不会要求终端用户安装 Git、Node.js、npm、Python 或 .NET SDK。
   它从指定 GitHub 仓库的一个固定 Release 下载已经构建好的本地 Marketplace ZIP，先校验
-  同一 Release 中的 SHA-256 文件，再把通过校验的包安装到稳定的本地目录并调用包内安装器。
+  同一 Release 中的 SHA-256 文件，再把通过校验的包交给包内安装器完成发行包级别的验证。
+  用户确认后，包内安装器会验证受信 Codex CLI 并尝试自动安装；CLI 自身可能写入临时数据。
+  若 CLI 不可用或自动安装失败，安装器会回滚本次 Marketplace 注册并安全回退到个人 Marketplace。
 
   为避免把“最新版本”误装到科研用户的电脑，RepositoryUrl 和 ReleaseTag 都是必填参数。
   发布者应只为已经审核的不可变标签创建 Release，例如 v1.0.0。
@@ -29,8 +31,10 @@ param(
     # 仅供 CI、排障或已明确知晓后果的场景跳过 Microsoft PowerPoint 桌面版检查。
     [switch]$SkipPowerPointCheck,
 
-    # 只下载、校验并部署 Marketplace 文件，不执行 Codex Marketplace 注册与插件安装。
-    [switch]$SkipCodexInstall
+    # 普通用户不需要此开关；它只供 CI 或维护者仅验证发行包，不尝试 CLI 自动安装或个人 Marketplace 回退。
+    # SkipCodexInstall 是旧版兼容别名，保留后仍表示跳过全部安装分支。
+    [Alias('SkipCodexInstall')]
+    [switch]$SkipPersonalMarketplaceDeployment
 )
 
 Set-StrictMode -Version Latest
@@ -814,6 +818,39 @@ function New-UniqueDirectory {
     return (Ensure-SafeDirectory -Path $path -Purpose '候选目录')
 }
 
+function ConvertFrom-PackageInstallerResult {
+    <#
+      包内安装器会把所有过程信息写到 Host，最后只输出一条压缩 JSON。根安装器必须
+      严格解析这条结果，而不能读取残留的 $LASTEXITCODE：CLI 自动安装失败后，包内
+      安装器可能已安全回退到个人 Marketplace，但原生命令的退出码仍会保留为非零。
+    #>
+    param([Parameter(Mandatory)][object[]]$Output)
+
+    $entries = @($Output | Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace([string]$_) })
+    if ($entries.Count -ne 1 -or $entries[0] -isnot [string]) {
+        throw '包内安装器必须且只能输出一条机器可读的 JSON 最终结果。'
+    }
+
+    try {
+        $result = $entries[0] | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+        throw "包内安装器的最终结果不是有效 JSON：$($_.Exception.Message)"
+    }
+
+    foreach ($requiredProperty in @('pass', 'installation_mode', 'plugin_installed', 'codex_cli_called', 'next_step')) {
+        if ($null -eq $result.PSObject.Properties[$requiredProperty]) {
+            throw "包内安装器的最终结果缺少字段：$requiredProperty"
+        }
+    }
+    if ($result.pass -ne $true -or [string]::IsNullOrWhiteSpace([string]$result.installation_mode) -or [string]::IsNullOrWhiteSpace([string]$result.next_step)) {
+        throw '包内安装器的最终结果不表示成功完成安装或安全回退。'
+    }
+    if ($result.plugin_installed -isnot [bool] -or $result.codex_cli_called -isnot [bool]) {
+        throw '包内安装器的最终结果中的安装状态字段必须为布尔值。'
+    }
+    return $result
+}
+
 Assert-ReleaseTag -Tag $ReleaseTag
 $repository = Get-RepositoryInformation -Url $RepositoryUrl
 if ([string]::IsNullOrWhiteSpace($InstallDirectory)) {
@@ -822,14 +859,21 @@ if ([string]::IsNullOrWhiteSpace($InstallDirectory)) {
 $InstallDirectory = Assert-SafeInstallDirectory -Path $InstallDirectory
 
 if ($WhatIfPreference) {
-    # -WhatIf 只展示将要发生的网络和文件操作，便于 CI 在不联网的条件下检查参数与布局。
+    # -WhatIf 不联网、不运行 CLI，也不创建目录；它如实说明真实安装会先验证受信 CLI，
+    # 再自动安装或在失败时回退到个人 Marketplace。
     [pscustomobject]@{
         pass = $true
-        action = 'would-download-and-install-release'
+        action = 'would-download-verify-and-attempt-cli-install-or-personal-marketplace-fallback'
         repository = $repository.CanonicalUrl
         release_tag = $ReleaseTag
         install_directory = $InstallDirectory
         marketplace_root = (Join-Path $InstallDirectory 'current')
+        installation_mode = 'trusted-cli-then-personal-marketplace-fallback'
+        next_step = 'after-user-confirmation-verify-trusted-cli-then-auto-install-or-restart-codex-and-install-from-plugins-directory'
+        plugin_installed = $false
+        codex_cli_called = $false
+        cli_temporary_data_possible = $true
+        marketplace_registration_rollback_on_failure = $true
         node_required = $false
     } | ConvertTo-Json -Depth 4
     return
@@ -892,6 +936,7 @@ try {
 $currentDirectory = Join-Path $InstallDirectory 'current'
 $previousDirectory = $null
 $activatedCandidate = $false
+$packageInstallationResult = $null
 try {
     $currentDirectory = Assert-NoReparsePointInExistingPath -Path $currentDirectory -Purpose 'current 安装目录'
     if ((Get-ExistingPathAttributes -Path $currentDirectory).Exists) {
@@ -904,7 +949,8 @@ try {
     $currentDirectory = Move-SafeInstallItem -Source $candidateDirectory -Destination $currentDirectory -Purpose '激活候选目录'
     $activatedCandidate = $true
 
-    # 包内安装器负责检查包内 SHA256SUMS、PowerPoint、Codex CLI 和 MCP 入口，避免两套规则漂移。
+    # 包内安装器负责检查包内 SHA256SUMS、PowerPoint 和 MCP 入口；在用户确认后验证受信 CLI，
+    # 优先自动安装，失败时回滚本次注册并回退个人 Marketplace，避免两套规则漂移。
     Test-ChecksumManifest -Root $currentDirectory
     Assert-ReleasePackageRoot -Root $currentDirectory
     $packageInstaller = Assert-SafeExistingFilePath -Path (Join-Path $currentDirectory 'install.ps1') -Purpose '包内安装器'
@@ -912,13 +958,13 @@ try {
     if ($SkipPowerPointCheck) {
         $installerParameters.SkipPowerPointCheck = $true
     }
-    if ($SkipCodexInstall) {
-        $installerParameters.SkipCodexInstall = $true
+    if ($SkipPersonalMarketplaceDeployment) {
+        $installerParameters.SkipPersonalMarketplaceDeployment = $true
     }
-    & $packageInstaller @installerParameters
-    if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
-        throw "包内安装器以退出码 $LASTEXITCODE 结束。"
-    }
+    # 包内安装器会捕获 CLI 的非零退出码并自行回退；因此绝不能读取此处残留的
+    # $LASTEXITCODE 判断成失败。最终状态只以其唯一机器可读结果或终止异常为准。
+    $packageInstallerOutput = @(& $packageInstaller @installerParameters)
+    $packageInstallationResult = ConvertFrom-PackageInstallerResult -Output $packageInstallerOutput
 } catch {
     $installationError = $_
     # 失败时保留候选包供排障，并将已知的旧版本恢复到固定 current 路径。
@@ -947,6 +993,10 @@ try {
     throw $installationError
 }
 
+if ($null -eq $packageInstallationResult) {
+    throw '包内安装器未返回可用的最终安装结果。'
+}
+
 [pscustomobject]@{
     pass = $true
     plugin = "$PluginName@$MarketplaceName"
@@ -956,6 +1006,12 @@ try {
     archive_sha256 = $expectedArchiveHash
     marketplace_root = $currentDirectory
     previous_marketplace_root = $previousDirectory
+    installation_mode = $packageInstallationResult.installation_mode
+    next_step = $packageInstallationResult.next_step
+    plugin_installed = $packageInstallationResult.plugin_installed
+    codex_cli_called = $packageInstallationResult.codex_cli_called
+    package_marketplace_path = if ($null -ne $packageInstallationResult.PSObject.Properties['marketplace_path']) { $packageInstallationResult.marketplace_path } else { $null }
+    package_detail = if ($null -ne $packageInstallationResult.PSObject.Properties['detail']) { $packageInstallationResult.detail } else { $null }
     node_required = $false
-    codex_install_skipped = [bool]$SkipCodexInstall
+    personal_marketplace_deployment_skipped = [bool]$SkipPersonalMarketplaceDeployment
 } | ConvertTo-Json -Depth 4

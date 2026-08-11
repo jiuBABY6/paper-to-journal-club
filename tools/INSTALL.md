@@ -6,27 +6,26 @@
 
 - 64 位 Windows；
 - 已安装并可正常启动的 Microsoft PowerPoint 桌面版；
-- 已安装 Codex 桌面版或 Codex CLI；
+- 已安装 Codex 桌面版；
 - 完整、已验证的本发行包。
 
 不需要安装 Node.js、npm、Python、Microsoft Word 或 .NET SDK。PDF 文本提取由发行包内预编译的 `paper-parser.exe` 完成。
 
 ## 离线安装
 
-1. 将 `paper-to-journal-club-marketplace-<version>.zip` 解压到一个稳定目录，例如 `C:\CodexMarketplaces\PaperToJournalClub`。安装后不要删除或移动该目录，因为 Codex 会将其作为本地 Marketplace 源。
+1. 将 `paper-to-journal-club-marketplace-<version>.zip` 解压到当前用户有写入权限的受信任目录，例如 `%USERPROFILE%\Downloads\PaperToJournalClub`。
 2. 在解压后的**包根目录**执行：
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\install.ps1
 ```
 
-3. 安装器会校验 `SHA256SUMS.txt`、PDF 解析器、Windows 位数和 PowerPoint COM 注册状态，然后登记并安装：
+3. 安装器会校验 `SHA256SUMS.txt`、PDF 解析器、Windows 位数和 PowerPoint COM 注册状态；在你确认安装后，它会验证受信 CLI 的实体路径和签名，并仅在同一安装事务中通过该绝对路径查询 Marketplace、尝试自动安装。CLI 自身可能写入少量临时数据：
 
-```text
-paper-to-journal-club@paper-to-journal-club-tools
-```
+   - Marketplace 查询和自动安装均成功时，安装器会使用已验证的绝对 CLI 路径完成安装；
+   - 若 CLI 不可执行（例如 WindowsApps 返回“拒绝访问”）、Marketplace 查询或自动安装失败，安装器仅在确认本次登记不存在或已精确回滚后进入**个人 Marketplace 回退**：不会修改 WindowsApps 权限或反复调用失败的 CLI，而是部署到当前用户的个人 Marketplace；若最终状态无法可靠确认，安装器会停止并报告错误，不会处理未知配置。
 
-4. 完全退出并重新打开 Codex，再新建一个任务。
+4. 完全退出并重新打开 Codex：自动安装成功时直接新建任务；个人 Marketplace 回退时，打开 **Plugins Directory**，选择个人 Marketplace，找到 **Paper to Journal Club** 并点击 **Install**，再新建一个任务。
 
 `RemoteSigned` 不会绕过企业组策略。若组织禁止未签名脚本，请让 IT 管理员审核并部署经过代码签名的发行包；安装器不会修改系统执行策略。
 
@@ -49,7 +48,9 @@ paper-to-journal-club@paper-to-journal-club-tools
 
 **找不到 PowerPoint。** 请安装 Microsoft PowerPoint 桌面版并至少启动一次；网页版不提供本插件所需的 COM 自动化接口。
 
-**找不到 Codex CLI。** 更新或重新安装 Codex 桌面版，并在新的 PowerShell 窗口中确认 `codex --version` 可运行。
+**在 Codex 中看不到 Paper to Journal Club。** 先查看安装器的最终结果。自动安装成功时，完全重启 Codex 后直接新建任务；个人 Marketplace 回退时，在 **Plugins Directory** 的个人 Marketplace 中点击 **Install**。若仍未出现，请重新运行同一版本的已验证发行包安装器。
+
+**提示 WindowsApps 拒绝访问或 CLI 不可执行。** 这是个人 Marketplace 回退的触发条件，不代表发行包损坏。不要修改 WindowsApps 权限、不要以管理员身份强行运行；重启 Codex 后在 **Plugins Directory** 点击 Install 即可。
 
 **提示解析器缺失或无效。** 说明下载或解压不完整。请重新获取带 `SHA256SUMS.txt` 的正式 Release ZIP，不要尝试用本机 Node.js、Python 或 .NET SDK 替代。
 

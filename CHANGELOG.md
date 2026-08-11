@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2
+
+- 将终端用户安装切换为官方个人 Marketplace 流程：安装器校验正式 Release 后，将已验证插件部署到当前用户目录并更新个人 Marketplace；重启 Codex 后由用户在 Plugins 页面点击 Install。
+- 不再直接执行 WindowsApps 内部的 `codex.exe`，从而避免“Access is denied”阻断安装；不修改 `config.toml`，也不要求 Node.js、npm、Python、.NET SDK 或管理员权限。
+- 为个人 Marketplace 部署增加 PowerShell 5.1 兼容、SHA-256 复核、重解析点拒绝、配置原子替换和中断恢复测试。
+
 ## 1.0.1
 
 - 收紧本地 MCP 的文件访问、布尔确认和 JSON-RPC 输入边界，防止提示注入诱导读取任意本机文件或覆盖现有演示稿。

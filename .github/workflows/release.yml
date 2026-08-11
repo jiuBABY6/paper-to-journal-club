@@ -60,6 +60,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           & (Join-Path $env:GITHUB_WORKSPACE 'tests/install-layout-tests.ps1')
+          & (Join-Path $env:GITHUB_WORKSPACE 'tests/personal-marketplace-installer-tests.ps1')
           & (Join-Path $env:GITHUB_WORKSPACE 'plugins/paper-to-journal-club/tests/content-template-tests.ps1')
           & (Join-Path $env:GITHUB_WORKSPACE 'plugins/paper-to-journal-club/tests/end-to-end-tests.ps1')
 
