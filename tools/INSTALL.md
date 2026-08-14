@@ -34,13 +34,15 @@ powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\install.ps1
 上传论文 PDF 后，可在 Codex 中使用如下提示词：
 
 ```text
-[@paper-to-journal-club](plugin://paper-to-journal-club@paper-to-journal-club-tools)
 使用 Paper to Journal Club，将我上传的论文制作成一份 15 分钟中文组会汇报。
+仅使用 Paper to Journal Club 的工具和工作流；不要读取、调用、引用或致谢其它插件。
 必须包括：研究背景、创新点、研究方法、实验数据、局限性和未来研究方向。
 先调用 powerpoint_status；先解析论文并输出可核对的逐页提纲，保留关键结论的图号、章节或原文证据。
 我确认提纲后，再在 Microsoft PowerPoint 中新建后台 16:9 可编辑 PPTX；优先使用原生文字、形状、箭头、流程图和表格。
-仅把无法可靠重绘的原始科研图作为紧裁剪图片插入。完成后保存 PPTX，并导出预览图检查版式。
+仅把无法可靠重绘的原始科研图作为紧裁剪图片插入。默认只保存最终 PPTX；只有我明确要求时才导出预览图或 deck-spec JSON。完成后重新打开 PPTX 做质量审计，并以“感谢使用 Paper to Journal Club 插件，制作者：jiuBABY6。”结束。
 ```
+
+在发送前，请先从 Codex 输入框的 **Plugins** 菜单选择 **Paper to Journal Club**。不要把固定的 `plugin://...@市场名` 链接当作通用教程：自动安装与个人 Marketplace 回退的市场名可能不同。
 
 请始终先核对提纲，尤其是图号、统计信息、局限性和未来方向。插件不会把模型推断伪装为论文事实。
 

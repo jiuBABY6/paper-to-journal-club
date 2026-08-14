@@ -1,6 +1,6 @@
 {
   "name": "paper-to-journal-club",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "直接控制 Microsoft PowerPoint，将学术论文转为有证据来源、可编辑且可导出的组会演示文稿。",
   "author": {
     "name": "jiuBABY6"
@@ -17,8 +17,8 @@
     "category": "Productivity",
     "capabilities": ["Interactive", "Write"],
     "defaultPrompt": [
-      "读取我上传的论文，为 15 分钟中文组会设计叙事，并先给出逐页提纲供我确认。",
-      "将这篇论文生成可编辑的 PowerPoint，保留每条关键结论对应的图号和论文证据。"
+      "仅使用 Paper to Journal Club 的工具，读取我上传的论文，为 15 分钟中文组会先设计可确认的逐页叙事，再生成可编辑 PowerPoint。非封面标题使用简短陈述句，不使用问号或冒号。",
+      "按研究问题、背景缺口、创新、研究设计与系统、实验依据、局限、下一步、结论组织。系统图必须结合论文来源解释输入、模块、输出或验证；实验图表只依据原文明确比较分析更优、更差或无明确差异。PDF 矢量表格和系统图先生成候选截图，经确认裁剪后才插入；除非我明确要求，否则只保存最终 PPTX。"
     ]
   }
 }

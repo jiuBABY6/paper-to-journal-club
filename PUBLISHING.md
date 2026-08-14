@@ -40,7 +40,7 @@ paper-to-journal-club/
 
 1. 更新 `plugins/paper-to-journal-club/.codex-plugin/plugin.json` 中的严格 SemVer 版本号。
 2. 在干净的 Windows 环境中运行插件测试和发行包验证；没有本机 .NET SDK 时，先在 GitHub **Actions → 发布 Paper to Journal Club 本地 Marketplace → Run workflow** 中选择 `main` 运行手动预检。该预检会完整构建解析器、生成并离线验证 ZIP，但只上传临时 Actions 工件，**不会创建或修改 GitHub Release**。
-3. 预检全绿后，创建与清单版本严格对应的 Git 标签，例如当前清单为 `1.0.2` 时，标签必须为 `v1.0.2`。
+3. 预检全绿后，创建与清单版本严格对应的 Git 标签，例如当前清单为 `1.0.3` 时，标签必须为 `v1.0.3`。
 4. 推送该标签。`release.yml` 会构建 PDF 解析器、创建本地 Marketplace ZIP、生成 ZIP 的外部 SHA-256 文件，并创建同名 GitHub Release。
 
 工作流固定 `actions/checkout` 与 `actions/setup-dotnet` 到完整提交 SHA，禁用 checkout 凭据持久化。构建/打包 job 仅有 `contents: read`，它只把四个已校验的最终资产交给独立的发布 job；后者不执行仓库源码，才获得创建 Release 所需的 `contents: write` 权限。SDK 也固定为 `8.0.418`。同一标签若已有 Release，工作流会失败，**绝不会**用 `--clobber` 覆写旧资产；修复必须发布新版本并使用新标签。

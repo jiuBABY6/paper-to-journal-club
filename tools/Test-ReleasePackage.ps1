@@ -607,6 +607,7 @@ $pluginRoot = Join-Path $root "plugins\$PluginName"
 $manifestPath = Join-Path $pluginRoot '.codex-plugin\plugin.json'
 $mcpPath = Join-Path $pluginRoot '.mcp.json'
 $serverPath = Join-Path $pluginRoot 'scripts\paper-to-journal-club-server.ps1'
+$pdfVisualRendererPath = Join-Path $pluginRoot 'scripts\render-pdf-page.ps1'
 $parserPath = Join-Path $pluginRoot 'assets\paper-parser.exe'
 $parserProjectPath = Join-Path $pluginRoot 'parser\PaperParser.csproj'
 $parserPackageLockPath = Join-Path $pluginRoot 'parser\packages.lock.json'
@@ -615,6 +616,7 @@ $requiredPaths = @(
     $manifestPath,
     $mcpPath,
     $serverPath,
+    $pdfVisualRendererPath,
     $parserPath,
     (Join-Path $pluginRoot 'skills'),
     (Join-Path $pluginRoot 'THIRD_PARTY_NOTICES.md'),

@@ -263,16 +263,40 @@ function Test-PowerPointComRegistration {
     return Test-Path 'Registry::HKEY_CLASSES_ROOT\PowerPoint.Application\CLSID'
 }
 
+function Get-PowerPointSlides {
+    param($Presentation)
+
+    # PowerShell 对部分 Office COM collection 会把整个 collection 当成一个对象，而不是逐项
+    # 枚举。显式按 1-based Item 索引读取，避免审计把 Slides/Shapes collection 误判为零尺寸形状。
+    $slides = @()
+    $count = [int]$Presentation.Slides.Count
+    for ($index = 1; $index -le $count; $index++) {
+        $slides += $Presentation.Slides.Item($index)
+    }
+    return @($slides)
+}
+
+function Get-PowerPointSlideShapes {
+    param($Slide)
+
+    $shapes = @()
+    $count = [int]$Slide.Shapes.Count
+    for ($index = 1; $index -le $count; $index++) {
+        $shapes += $Slide.Shapes.Item($index)
+    }
+    return @($shapes)
+}
+
 function Get-PowerPointPresentationSummary {
     param($Presentation)
-    $slides = @($Presentation.Slides)
+    $slides = @(Get-PowerPointSlides -Presentation $Presentation)
     return [pscustomobject]@{
         name = $Presentation.Name
         full_name = $Presentation.FullName
         slide_count = $slides.Count
         width = [double]$Presentation.PageSetup.SlideWidth
         height = [double]$Presentation.PageSetup.SlideHeight
-        shapes_per_slide = @($slides | ForEach-Object { $_.Shapes.Count })
+        shapes_per_slide = @($slides | ForEach-Object { [int]$_.Shapes.Count })
         native_picture_count = 0
     }
 }
@@ -311,7 +335,7 @@ function Export-PowerPointPreviews {
     $PreviewDirectory = Assert-PaperToJournalClubAllowedPath -Path $PreviewDirectory -AllowedRoots (Get-PaperToJournalClubApprovedWriteRoots) -ParameterName 'PreviewDirectory'
     New-Item -ItemType Directory -Force -Path $PreviewDirectory | Out-Null
     $paths = @()
-    foreach ($slide in @($Presentation.Slides)) {
+    foreach ($slide in @(Get-PowerPointSlides -Presentation $Presentation)) {
         $fileName = 'slide-{0:D2}.png' -f [int]$slide.SlideIndex
         $path = Join-Path $PreviewDirectory $fileName
         # Export uses the native PowerPoint renderer, avoiding LibreOffice font differences.
@@ -337,11 +361,11 @@ function Invoke-PowerPointQualityAudit {
         $findings += [pscustomobject]@{ severity = 'hard'; category = 'slides'; slide = $null; shape = $null; issue = 'empty-presentation'; correction = 'Create at least one slide.' }
     }
 
-    foreach ($slide in @($Presentation.Slides)) {
+    foreach ($slide in @(Get-PowerPointSlides -Presentation $Presentation)) {
         if ($slide.Shapes.Count -lt 2) {
             $findings += [pscustomobject]@{ severity = 'hard'; category = 'editability'; slide = $slide.SlideIndex; shape = $null; issue = 'too-few-native-objects'; correction = 'Create independently editable slide objects.' }
         }
-        foreach ($shape in @($slide.Shapes)) {
+        foreach ($shape in @(Get-PowerPointSlideShapes -Slide $slide)) {
             if ($shape.Type -eq 13) {
                 $pictureCount++
                 if ([string]$shape.AlternativeText -match 'atomic_raster_unit=true') { $atomicPictureCount++ }
@@ -374,7 +398,7 @@ function Invoke-PowerPointQualityAudit {
 }
 
 function Open-PowerPointPresentationReadOnly {
-    param([string]$Path)
+    param([string]$Path, [switch]$WithWindow)
     $application = $null
     $presentation = $null
     try {
@@ -382,14 +406,14 @@ function Open-PowerPointPresentationReadOnly {
         # ppAlertsNone = 1；先收紧宏与交互警告，再打开用户提供的演示文稿。
         Set-PaperToJournalClubOfficeAutomationSecurity -Application $application -OfficeApplication 'Microsoft PowerPoint' -DisplayAlertsValue 1
         $application.Visible = -1
-        # Slide.Export can hang when a file-backed presentation is opened without a window.
-        # Keep a native window, then minimize it so the audit does not repeatedly steal focus.
-        $presentation = $application.Presentations.Open([IO.Path]::GetFullPath($Path), $true, $false, $true)
-        try { $application.WindowState = 2 } catch { }
+        # 没有预览导出时不创建窗口，避免某些 Office 版本在 WithWindow=true 的读取会话中
+        # 返回不完整的 Slides/Shapes COM collection。只有需要 Slide.Export 时才创建并最小化窗口。
+        $presentation = $application.Presentations.Open([IO.Path]::GetFullPath($Path), $true, $false, [bool]$WithWindow)
+        if ($WithWindow) { try { $application.WindowState = 2 } catch { } }
         return [pscustomobject]@{ application = $application; presentation = $presentation }
     } catch {
-        if ($presentation) { $presentation.Close() }
-        if ($application) { $application.Quit() }
+        if ($presentation) { try { $presentation.Close() } catch { } }
+        if ($application) { try { $application.Quit() } catch { } }
         throw
     }
 }
@@ -397,8 +421,15 @@ function Open-PowerPointPresentationReadOnly {
 function Close-PowerPointReadOnlySession {
     param($Session)
     if ($null -eq $Session) { return }
-    if ($Session.presentation) { $Session.presentation.Close(); [Runtime.InteropServices.Marshal]::ReleaseComObject($Session.presentation) | Out-Null }
-    if ($Session.application) { $Session.application.Quit(); [Runtime.InteropServices.Marshal]::ReleaseComObject($Session.application) | Out-Null }
+    # 后台审计窗口退出时可能已由 Office 断开 RPC；这不应覆盖已经获得的审计结果。
+    if ($Session.presentation) {
+        try { $Session.presentation.Close() } catch { }
+        try { [Runtime.InteropServices.Marshal]::ReleaseComObject($Session.presentation) | Out-Null } catch { }
+    }
+    if ($Session.application) {
+        try { $Session.application.Quit() } catch { }
+        try { [Runtime.InteropServices.Marshal]::ReleaseComObject($Session.application) | Out-Null } catch { }
+    }
     [GC]::Collect()
     [GC]::WaitForPendingFinalizers()
 }

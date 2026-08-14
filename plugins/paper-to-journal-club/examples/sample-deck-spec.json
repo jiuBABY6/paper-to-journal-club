@@ -182,11 +182,11 @@
                        "id":  "tl-dr",
                        "kind":  "summary",
                        "section":  "summary",
-                       "title":  "一句话总结：这篇论文回答了什么问题？",
+                       "title":  "研究问题与核心结论",
                        "takeaway":  "Cell-state-specific responses to perturbation remain difficult to predict.",
                        "bullets":  [
                                        "Cell-state-specific responses to perturbation remain difficult to predict.",
-                                       "We combined perturbation screening with single-cell sequencing to identify a signaling circuit that changes across inflammatory contexts.",
+                                       "Perturbation screening and single-cell sequencing identify a context-dependent signaling circuit.",
                                        "The model improved prediction of response compared with a baseline classifier."
                                    ],
                        "source_claim_ids":  [
@@ -228,9 +228,9 @@
                        "kind":  "innovation",
                        "section":  "innovation",
                        "title":  "创新点与学术贡献",
-                       "takeaway":  "We combined perturbation screening with single-cell sequencing to identify a signaling circuit that changes across inflammatory contexts.",
+                       "takeaway":  "Perturbation screening and single-cell sequencing identify a context-dependent signaling circuit.",
                        "bullets":  [
-                                       "We combined perturbation screening with single-cell sequencing to identify a signaling circuit that changes across inflammatory contexts."
+                                       "Perturbation screening and single-cell sequencing identify a context-dependent signaling circuit."
                                    ],
                        "source_claim_ids":  [
 
@@ -271,11 +271,11 @@
                        "id":  "experimental-data-1",
                        "kind":  "result",
                        "section":  "experimental_data",
-                       "title":  "实验数据 1",
+                       "title":  "主要比较显示更优预测表现",
                        "takeaway":  "The context-aware model significantly improved response prediction relative to the baseline model (Fig. 1b).",
                        "bullets":  [
-                                       "汇报前请结合原始图注核对统计学描述和因果措辞。",
-                                       "将引用的论文图作为原子图像插入，图中文字、箭头和标注应保持可编辑。"
+                                       "结论来自结果段的直接表述。",
+                                       "仍需结合图注核对比较组、统计量和效应大小。"
                                    ],
                        "source_claim_ids":  [
                                                 "claim-01"
@@ -288,17 +288,24 @@
                                              ],
                        "evidence_status":  "source-backed",
                        "content_mode":  "author-direct",
-                       "suggested_figure_id":  "fig-1b"
+                       "suggested_figure_id":  "fig-1b",
+                       "visual_role":  "result-figure",
+                       "result_analysis": {
+                           "comparison_kind": "reported-better",
+                           "comparison": "作者在该比较中报告主要指标更优。",
+                           "interpretation": "结论来自结果段的直接表述。",
+                           "caveat": "仍需结合图注核对比较组、统计量和效应大小。"
+                       }
                    },
                    {
                        "id":  "experimental-data-2",
                        "kind":  "result",
                        "section":  "experimental_data",
-                       "title":  "实验数据 2",
+                       "title":  "炎症条件下出现特异性通路激活",
                        "takeaway":  "Perturbation of regulator X increased pathway activation only in inflammatory cultures (Fig. 2a).",
                        "bullets":  [
-                                       "汇报前请结合原始图注核对统计学描述和因果措辞。",
-                                       "将引用的论文图作为原子图像插入，图中文字、箭头和标注应保持可编辑。"
+                                       "作者报告了这一实验观察。",
+                                       "需结合图注确认指标方向与统计信息。"
                                    ],
                        "source_claim_ids":  [
                                                 "claim-02"
@@ -311,17 +318,24 @@
                                              ],
                        "evidence_status":  "source-backed",
                        "content_mode":  "author-direct",
-                       "suggested_figure_id":  "fig-2a"
+                       "suggested_figure_id":  "fig-2a",
+                       "visual_role":  "result-figure",
+                       "result_analysis": {
+                           "comparison_kind": "reported-observation",
+                           "comparison": "作者报告了这一实验观察。",
+                           "interpretation": "原文未提供足够明确的优劣措辞。",
+                           "caveat": "汇报时需结合图注确认指标方向与统计信息。"
+                       }
                    },
                    {
                        "id":  "experimental-data-3",
                        "kind":  "result",
                        "section":  "experimental_data",
-                       "title":  "实验数据 3",
+                       "title":  "介质抑制支持情境依赖机制",
                        "takeaway":  "Inhibition of mediator Y reduced the phenotype and supported a context-dependent mechanism (Fig. 3c).",
                        "bullets":  [
-                                       "汇报前请结合原始图注核对统计学描述和因果措辞。",
-                                       "将引用的论文图作为原子图像插入，图中文字、箭头和标注应保持可编辑。"
+                                       "作者报告了这一实验观察。",
+                                       "不要把单个结果外推为整体结论。"
                                    ],
                        "source_claim_ids":  [
                                                 "claim-03"
@@ -334,7 +348,14 @@
                                              ],
                        "evidence_status":  "source-backed",
                        "content_mode":  "author-direct",
-                       "suggested_figure_id":  "fig-3c"
+                       "suggested_figure_id":  "fig-3c",
+                       "visual_role":  "result-figure",
+                       "result_analysis": {
+                           "comparison_kind": "reported-observation",
+                           "comparison": "作者报告了这一实验观察。",
+                           "interpretation": "结果支持情境依赖机制这一作者解释。",
+                           "caveat": "不要把单个结果外推为整体结论。"
+                       }
                    },
                    {
                        "id":  "limitations",
@@ -362,10 +383,10 @@
                        "kind":  "future-directions",
                        "section":  "future_directions",
                        "title":  "未来研究方向",
-                        "takeaway":  "Presenter discussion / 汇报者讨论：请设计能够回应已报告局限性的下一步实验。",
+                        "takeaway":  "汇报者讨论应围绕已报告局限设计下一步实验。",
                        "bullets":  [
-                                       "已报告的局限性：The limited donor number and in-vitro model constrain generalization.",
-                                       "汇报者建议：所有验证性方案均应标注为讨论，而非作者结论。"
+                                       "论文报告的局限是供体数量和体外模型限制了外推性。",
+                                       "验证性方案属于汇报者讨论，不应表述为作者结论。"
                                    ],
                        "source_claim_ids":  [
 

@@ -72,6 +72,32 @@ function Invoke-McpTool {
     return $response.result.content[0].text | ConvertFrom-Json
 }
 
+function Get-PptxShapeNames {
+    param([string]$PresentationPath)
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = $null
+    try {
+        $archive = [IO.Compression.ZipFile]::OpenRead($PresentationPath)
+        $names = @()
+        foreach ($entry in @($archive.Entries | Where-Object { $_.FullName -match '^ppt/slides/slide\d+\.xml$' })) {
+            $reader = $null
+            try {
+                $reader = New-Object IO.StreamReader($entry.Open())
+                $xml = $reader.ReadToEnd()
+                foreach ($match in [regex]::Matches($xml, '<p:cNvPr[^>]*\bname="([^"]+)"')) {
+                    $names += $match.Groups[1].Value
+                }
+            } finally {
+                if ($reader) { $reader.Dispose() }
+            }
+        }
+        return @($names)
+    } finally {
+        if ($archive) { $archive.Dispose() }
+    }
+}
+
 if (-not (Test-Path -LiteralPath $serverPath -PathType Leaf)) { throw "Server script not found: $serverPath" }
 if (-not (Test-Path -LiteralPath $fixturePath -PathType Leaf)) { throw "Fixture paper not found: $fixturePath" }
 $expectedPluginVersion = [string]((Get-Content -LiteralPath $pluginManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json).version)
@@ -154,6 +180,22 @@ try {
     Assert-Condition ($null -ne $stringOverwrite.error -and $stringOverwrite.error.message -match 'JSON boolean') 'String overwrite=false must not authorize replacing an existing file.'
     Assert-Condition ((Get-Content -LiteralPath $existingSpec -Raw -Encoding UTF8).Trim() -eq 'do-not-overwrite') 'Rejected overwrite request must leave the existing file unchanged.'
 
+    # 图片长期保留是严格布尔开关；字符串值和任意导出路径参数都不能在启动 Office 前
+    # 改变文件系统行为。
+    $stringFigureOutput = Join-Path $securityRoot 'string-figure-assets.pptx'
+    $stringFigureAssets = Invoke-McpRaw ([ordered]@{
+        jsonrpc = '2.0'; id = 24.5; method = 'tools/call'
+        params = [ordered]@{ name = 'generate_editable_pptx'; arguments = @{ deck_spec = $deck; output_path = $stringFigureOutput; export_figure_assets = 'false' } }
+    })
+    Assert-Condition ($null -ne $stringFigureAssets.error -and $stringFigureAssets.error.message -match 'JSON boolean') 'String export_figure_assets=false must be rejected before PowerPoint generation.'
+    Assert-Condition (-not (Test-Path -LiteralPath $stringFigureOutput)) 'Rejected figure-asset export flag must not create a PPTX.'
+
+    $unknownFigureExportArgument = Invoke-McpRaw ([ordered]@{
+        jsonrpc = '2.0'; id = 24.6; method = 'tools/call'
+        params = [ordered]@{ name = 'generate_editable_pptx'; arguments = @{ deck_spec = $deck; output_path = (Join-Path $securityRoot 'unknown-figure-assets.pptx'); asset_export_directory = $securityRoot } }
+    })
+    Assert-Condition ($null -ne $unknownFigureExportArgument.error -and $unknownFigureExportArgument.error.message -match 'unsupported argument') 'Figure-asset export must not accept a caller-controlled output directory.'
+
     $assetDirectory = Join-Path $securityRoot 'assets'
     New-Item -ItemType Directory -Force -Path $assetDirectory | Out-Null
     $assetSentinel = Join-Path $assetDirectory 'sentinel.txt'
@@ -164,6 +206,15 @@ try {
     })
     Assert-Condition ($null -ne $stringConfirm.error -and $stringConfirm.error.message -match 'JSON boolean') 'String confirm=false must not authorize deletion.'
     Assert-Condition (Test-Path -LiteralPath $assetSentinel -PathType Leaf) 'Rejected cleanup request must preserve temporary assets.'
+
+    # 仅位于插件临时根并不足以成为可删对象：长期保存的 <PPT名>_assets 若恰好位于
+    # 临时根，也必须因缺少 analyse_paper 所有权标记而受保护。
+    $unownedCleanup = Invoke-McpRaw ([ordered]@{
+        jsonrpc = '2.0'; id = 25.5; method = 'tools/call'
+        params = [ordered]@{ name = 'cleanup_paper_assets'; arguments = @{ asset_output_dir = $assetDirectory; confirm = $true } }
+    })
+    Assert-Condition ($null -ne $unownedCleanup.error -and $unownedCleanup.error.message -match 'ownership marker') 'Cleanup must refuse an unowned directory even when confirm=true.'
+    Assert-Condition (Test-Path -LiteralPath $assetSentinel -PathType Leaf) 'Ownership-marker cleanup rejection must preserve files.'
 
     # SVG/EMF/WMF 等可执行或复杂矢量格式在进入 PowerPoint COM 前必须被拒绝。
     . (Join-Path $pluginFullPath 'scripts\powerpoint-quality.ps1')
@@ -193,25 +244,117 @@ if (-not $RunPowerPoint) {
 if (-not $status.powerpoint_com_registered) { throw 'PowerPoint COM is required when -RunPowerPoint is specified.' }
 $workDirectory = Join-Path ([IO.Path]::GetTempPath()) "paper-to-journal-club\e2e-tests\$([Guid]::NewGuid().ToString('N'))"
 try {
+    # 测试直接构造的图片资产必须位于服务端认可的插件临时根，而不是 e2e-tests
+    # 的父级。否则 JSON 回传到独立 MCP 进程后会被路径边界正确拒绝。
+    $assetWorkDirectory = Join-Path ([IO.Path]::GetTempPath()) "paper-to-journal-club\e2e-figure-assets\$([Guid]::NewGuid().ToString('N'))"
+    New-Item -ItemType Directory -Force -Path $assetWorkDirectory | Out-Null
+    # 默认交付物应保持干净：仅输出 PPTX；内部 deck spec 在生成后删除，PNG 仅按需导出。
+    $defaultPptxPath = Join-Path $workDirectory 'journal-club-default.pptx'
+    $defaultGeneration = Invoke-McpTool 6 'generate_editable_pptx' @{
+        deck_spec = $deck
+        output_path = $defaultPptxPath
+        keep_powerpoint_open = $false
+    }
+    Assert-Condition (Test-Path -LiteralPath $defaultPptxPath -PathType Leaf) 'Default generation must write a PPTX.'
+    Assert-Condition ($defaultGeneration.quality_audit.pass) 'Default generation must still run the native quality audit.'
+    Assert-Condition (-not $defaultGeneration.deck_spec_saved -and $null -eq $defaultGeneration.deck_spec_path) 'Default generation must not persist a deck-spec sidecar.'
+    $defaultPreviewPaths = @($defaultGeneration.preview_paths | Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace([string]$_) })
+    Assert-Condition ([string]::IsNullOrWhiteSpace([string]$defaultGeneration.preview_directory)) 'Default generation must not return a preview directory.'
+    Assert-Condition ($defaultPreviewPaths.Count -eq 0) 'Default generation must not export PNG previews.'
+    Assert-Condition (-not $defaultGeneration.figure_assets_exported -and $null -eq $defaultGeneration.figure_assets_directory -and @($defaultGeneration.figure_asset_paths).Count -eq 0) 'Default generation must not export paper figure assets.'
+    Assert-Condition (-not (Test-Path -LiteralPath "$defaultPptxPath.deck-spec.json")) 'Default generation must not create a deck-spec file next to the PPTX.'
+    Assert-Condition (-not (Test-Path -LiteralPath "$defaultPptxPath.previews")) 'Default generation must not create a preview directory next to the PPTX.'
+    Assert-Condition (-not (Test-Path -LiteralPath (Join-Path $workDirectory 'journal-club-default_assets'))) 'Default generation must not create a figure-asset directory next to the PPTX.'
+    $defaultShapeNames = @(Get-PptxShapeNames -PresentationPath $defaultPptxPath)
+    Assert-Condition (@($defaultShapeNames | Where-Object { $_ -match '^slide-\d+-evidence$' }).Count -eq 0) 'Text-only slides must not contain an Evidence/figure placeholder card.'
+
+    # 一张经批准、可追溯的论文图片必须成为真正的 PowerPoint 图片对象；这同时覆盖
+    # “有图则插入”与生成器的安全资产目录边界，避免仅在 deck spec 层面看起来正确。
+    $automaticFigurePath = Join-Path $assetWorkDirectory 'automatic-figure.png'
+    Add-Type -AssemblyName System.Drawing
+    $testBitmap = New-Object System.Drawing.Bitmap 640, 360
+    $testGraphics = [System.Drawing.Graphics]::FromImage($testBitmap)
+    try {
+        $testGraphics.Clear([System.Drawing.Color]::White)
+        $testGraphics.FillRectangle([System.Drawing.Brushes]::SteelBlue, 40, 40, 560, 280)
+        $testGraphics.DrawLine([System.Drawing.Pens]::White, 80, 260, 560, 100)
+        $testBitmap.Save($automaticFigurePath, [System.Drawing.Imaging.ImageFormat]::Png)
+    } finally {
+        if ($testGraphics) { $testGraphics.Dispose() }
+        if ($testBitmap) { $testBitmap.Dispose() }
+    }
+    $figureDeck = $deck | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+    # JSON round-trip 后 asset_directory 是已有但值为 null 的属性；Add-Member -Force 在
+    # Windows PowerShell 5.1 不会可靠替换此类属性，因此直接赋值即可。
+    $figureDeck.evidence_pack.extraction.asset_directory = $assetWorkDirectory
+    $figureDeck.evidence_pack.figures += [pscustomobject]@{
+        id = 'fig-automatic-e2e'
+        label = 'Fig. automatic e2e'
+        context = 'A single extracted experimental figure for end-to-end validation.'
+        source_page = 1
+        source_pages = @(1)
+        figure_asset_candidates = @($automaticFigurePath)
+        asset_match = 'same-page-single-raster'
+        automatic_image_path = $automaticFigurePath
+    }
+    $figureSlide = @($figureDeck.slides | Where-Object { $_.section -eq 'experimental_data' } | Select-Object -First 1)
+    Assert-Condition ($figureSlide.Count -eq 1) 'Fixture must contain an experimental-data slide for automatic figure insertion.'
+    $figureSlide[0].source_figure_ids = @('fig-automatic-e2e')
+    $figureSlide[0] | Add-Member -NotePropertyName 'suggested_figure_id' -NotePropertyValue 'fig-automatic-e2e' -Force
+    $figureSlide[0] | Add-Member -NotePropertyName 'suggested_image_path' -NotePropertyValue $automaticFigurePath -Force
+    $figureSlide[0] | Add-Member -NotePropertyName 'figure_asset_candidates' -NotePropertyValue @($automaticFigurePath) -Force
+    $figurePptxPath = Join-Path $workDirectory 'journal-club-with-figure.pptx'
+    $figureGeneration = Invoke-McpTool 6.5 'generate_editable_pptx' @{
+        deck_spec = $figureDeck
+        output_path = $figurePptxPath
+        export_figure_assets = $true
+        keep_powerpoint_open = $false
+    }
+    Assert-Condition ($figureGeneration.quality_audit.pass) 'A deck with one approved figure must pass PowerPoint quality audit.'
+    $expectedFigureAssetDirectory = Join-Path $workDirectory 'journal-club-with-figure_assets\images'
+    Assert-Condition ($figureGeneration.figure_assets_exported -and $figureGeneration.figure_assets_directory -eq $expectedFigureAssetDirectory) 'Explicit figure-asset export must return the derived sibling images directory.'
+    Assert-Condition (@($figureGeneration.figure_asset_paths).Count -eq 1 -and (Test-Path -LiteralPath $figureGeneration.figure_asset_paths[0] -PathType Leaf)) 'Explicit figure-asset export must copy exactly the inserted figure.'
+    $exportedFigureBytes = [IO.File]::ReadAllBytes($figureGeneration.figure_asset_paths[0])
+    $sourceFigureBytes = [IO.File]::ReadAllBytes($automaticFigurePath)
+    Assert-Condition ([Convert]::ToBase64String($exportedFigureBytes) -eq [Convert]::ToBase64String($sourceFigureBytes)) 'Exported figure asset must preserve the original approved raster bytes.'
+    Assert-Condition ($figureGeneration.figure_asset_export.exported_count -eq 1 -and $figureGeneration.figure_asset_export.assets[0].source_sha256 -eq $figureGeneration.figure_asset_export.assets[0].sha256) 'Figure-asset export manifest must report the verified source hash.'
+    $figureShapeNames = @(Get-PptxShapeNames -PresentationPath $figurePptxPath)
+    Assert-Condition (@($figureShapeNames | Where-Object { $_ -match '^slide-\d+-figure-image$' }).Count -eq 1) 'A reliable extracted figure must be embedded as one editable PowerPoint picture object.'
+
+    # 导出资产即使位于插件临时根，也不是 analyse_paper 的临时目录；清理工具不得删除。
+    $exportedAssetCleanup = Invoke-McpRaw ([ordered]@{
+        jsonrpc = '2.0'; id = 6.6; method = 'tools/call'
+        params = [ordered]@{ name = 'cleanup_paper_assets'; arguments = @{ asset_output_dir = $expectedFigureAssetDirectory; confirm = $true } }
+    })
+    Assert-Condition ($null -ne $exportedAssetCleanup.error -and $exportedAssetCleanup.error.message -match 'ownership marker') 'Cleanup must refuse the persistent figure-asset directory.'
+    Assert-Condition (Test-Path -LiteralPath $figureGeneration.figure_asset_paths[0] -PathType Leaf) 'Rejected cleanup must preserve the exported source image.'
+
     $pptxPath = Join-Path $workDirectory 'journal-club.pptx'
     $previewDirectory = Join-Path $workDirectory 'previews'
-    $generation = Invoke-McpTool 6 'generate_editable_pptx' @{
+    $deckSpecPath = Join-Path $workDirectory 'journal-club.deck-spec.json'
+    $generation = Invoke-McpTool 7 'generate_editable_pptx' @{
         deck_spec = $deck
         output_path = $pptxPath
+        deck_spec_output_path = $deckSpecPath
         preview_directory = $previewDirectory
         export_previews = $true
         keep_powerpoint_open = $false
     }
     Assert-Condition (Test-Path -LiteralPath $pptxPath -PathType Leaf) 'Generation must write a PPTX.'
     Assert-Condition ($generation.quality_audit.pass) 'Native PowerPoint quality audit must pass.'
+    Assert-Condition ($generation.deck_spec_saved -and (Test-Path -LiteralPath $deckSpecPath -PathType Leaf)) 'An explicit deck-spec output path must be preserved.'
     Assert-Condition (@($generation.preview_paths).Count -eq @($deck.slides).Count) 'Every generated slide must have a native preview.'
 
     # 重新打开文件验证，确保不是仅在生成会话中看似可用。
-    $fileAudit = Invoke-McpTool 7 'audit_editable_pptx' @{ file_path = $pptxPath; export_previews = $false }
+    $fileAudit = Invoke-McpTool 8 'audit_editable_pptx' @{ file_path = $pptxPath; export_previews = $false }
     Assert-Condition ($fileAudit.connection_scope -eq 'file-read-only') 'Saved-deck audit must truthfully report file-read-only scope.'
     Assert-Condition ($fileAudit.quality_audit.pass) 'Reopened PPTX must pass native PowerPoint audit.'
     Write-Output 'PASS: end-to-end-tests.ps1 (including PowerPoint generation and reopen audit)'
 } finally {
+    if (Test-Path -LiteralPath $assetWorkDirectory) {
+        # 仅删除本测试刚创建的、带 GUID 的临时图像目录。
+        Remove-Item -LiteralPath $assetWorkDirectory -Recurse -Force
+    }
     if ((Test-Path -LiteralPath $workDirectory) -and -not $KeepArtifacts) {
         # 仅删除本测试刚创建的、带 GUID 的临时目录。
         Remove-Item -LiteralPath $workDirectory -Recurse -Force

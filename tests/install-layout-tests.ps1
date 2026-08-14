@@ -51,8 +51,13 @@ $releaseToolPaths = @(
     (Join-Path $RepositoryRoot 'tools\INSTALL.md')
 )
 $personalMarketplaceInstallerTestPath = Join-Path $RepositoryRoot 'tests\personal-marketplace-installer-tests.ps1'
+$runtimeScriptPaths = @(
+    (Join-Path $pluginRoot 'scripts\paper-to-journal-club-server.ps1'),
+    (Join-Path $pluginRoot 'scripts\generate-editable-pptx.ps1'),
+    (Join-Path $pluginRoot 'scripts\render-pdf-page.ps1')
+)
 
-foreach ($path in @($installPowerShellPath, $publishingPath, $globalJsonPath, $workflowPath, $lockWorkflowPath, $marketplacePath, $personalMarketplaceInstallerTestPath, (Join-Path $pluginRoot '.codex-plugin\plugin.json'), (Join-Path $pluginRoot '.mcp.json')) + $releaseToolPaths) {
+foreach ($path in @($installPowerShellPath, $publishingPath, $globalJsonPath, $workflowPath, $lockWorkflowPath, $marketplacePath, $personalMarketplaceInstallerTestPath, (Join-Path $pluginRoot '.codex-plugin\plugin.json'), (Join-Path $pluginRoot '.mcp.json')) + $releaseToolPaths + $runtimeScriptPaths) {
     Assert-FileExists -Path $path
 }
 

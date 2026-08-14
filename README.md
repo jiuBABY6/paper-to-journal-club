@@ -29,12 +29,15 @@ Paper to Journal Club 运行在 Windows 本机：它先从论文构建可追溯�
 5. ⚖️ 局限性与批判性评价；
 6. 🔭 未来研究方向。
 
-生成过程中还会输出：
+生成过程中，Codex 会在对话中返回可审阅的证据包、逐页提纲和质量报告。默认只在你指定的输出目录保存：
 
-- 🧾 **Evidence pack**：论文章节、候选结论、图号、页码和原文摘录；
-- 🗂️ **Deck spec**：生成 PowerPoint 前可修改、可审阅的逐页提纲；
-- 🖼️ **可编辑 PPTX**：文字、形状、箭头、流程图和表格都可继续修改；
-- ✅ **预览与质量报告**：逐页 PNG 预览、文字溢出、画布越界和对象结构检查。
+- 🖼️ **可编辑 PPTX**：文字、形状、箭头、流程图和表格都可继续修改。
+
+下列辅助产物仅在你明确要求时才保存：
+
+- 🧾 **Deck spec JSON**：用于长期保存逐页提纲和证据引用；
+- ✅ **逐页 PNG 预览**：用于人工视觉复核；
+- 🖼️ **已用论文原图副本**：可明确要求保留到 `<PPT名>_assets/images`，便于长期归档或二次使用。
 
 可先查看示例：[sample-journal-club.pptx](plugins/paper-to-journal-club/examples/sample-journal-club.pptx)；对应的可审阅内容规格见 [sample-deck-spec.json](plugins/paper-to-journal-club/examples/sample-deck-spec.json)。
 
@@ -44,10 +47,13 @@ Paper to Journal Club 运行在 Windows 本机：它先从论文构建可追溯�
 - 正式发行包自带 `paper-parser.exe`，普通用户无需配置解析环境；
 - 缺少来源或六个必备模块时，会阻止生成 PPT，避免“看起来完整、实际不可追溯”；
 - 每个关键结论可保留来源章节、图号、页码或原文摘录；
-- 复杂原始科研图可作为紧裁剪图片插入；标题、箭头、注释和强调框尽量用 PowerPoint 原生对象构建；
-- 使用 Windows PowerPoint COM 创建、保存、导出和重新打开审计演示稿；
+- 组会视觉素材默认只选择方法/系统结构、主实验结果和消融实验；案例分析、失败示例和错误案例即使可识别也默认跳过，只有用户明确要求时才作为补充讨论纳入。能被可靠关联的图或表会作为独立图片对象插入；当服务能确认 `Fig. 1` 与同页唯一的原始图片资产对应时，会记录 `fig-1 → page-03-image-01` 的可追溯映射，并将这张图片插入对应的系统页或结果页；系统页同时给出来源可追溯的输入、模块、输出或验证说明，实验页同时给出比较、解释和局限；没有可用图或关联不明确时不猜测、不插入占位图；
+- 复杂原始科研图保留为紧裁剪图片；标题、箭头、注释和强调框尽量用 PowerPoint 原生对象构建；
+- 使用 Windows PowerPoint COM 创建、保存、重新打开审计演示稿；需要时才导出原生预览；
 - 始终创建新的后台演示文稿，不会覆盖你当前打开的 PowerPoint；
 - 支持 `powerpoint_status`、`inspect_powerpoint` 和 `audit_editable_pptx`，如实说明当前窗口检查或文件只读审计的结果。
+
+> 📌 图片流程始终是“按完整 Figure/Table 编号定位 → 获取对应 PDF 来源页 → 渲染候选 PNG 并裁剪 → 用户确认 → 插入 → 依据原文和图注生成说明”。例如，只有 `Fig. 1` 所在页恰好有一个已识别 Figure 和一张合规内嵌 PNG/JPEG 时，才会自动绑定；`Fig. 1` 不会误匹配 `Fig. 10`。对于矢量曲线、系统图或 PDF 表格，可用 `render_paper_visual` 渲染已审核来源页；页面渲染图和裁剪区域必须由用户确认后才可插入。插件不会自动识别表格单元格、多 panel 区域，也不会从截图猜测统计结论或代替原文/图注编写说明。
 
 ## ✅ 使用前准备
 
@@ -70,6 +76,8 @@ Paper to Journal Club 运行在 Windows 本机：它先从论文构建可追溯�
 | 📴 离线安装 | 内网或受限网络环境 | 可在联网机器下载并核验后转移 ZIP。 |
 
 > 🧭 **安装器会自动选择合适的安装方式。** 它会检查发布文件完整性并尝试自动安装；如果需要你完成额外操作，结果会明确告诉你重启 Codex 后的下一步。普通用户不需要安装或手动调用 Node.js、Python、.NET SDK 或 Codex CLI。
+>
+> 安装事务中，已验证的 Codex CLI 可能写入自身临时数据。若自动安装失败，安装器只会在确认本次 Marketplace 登记不存在或已经精确回滚后，才安全回退到个人 Marketplace；若状态无法可靠确认，会停止并报告错误，不会擅自修改未知配置。
 
 ### 🤖 方式 1：把安装说明发送给 Codex（推荐）
 
@@ -81,6 +89,7 @@ https://github.com/jiuBABY6/paper-to-journal-club
 
 请先读取该仓库的 GitHub Releases，选择最新的非草稿、非预发布正式版本；如果没有正式 Release，请停止并告诉我，不要安装 main 或其他开发分支。
 请使用该 Release 中的官方 bootstrap 安装器完成安装，并校验发布文件完整性。
+下载安装资产时，仅使用 `$env:TEMP` 下新建的专用临时目录；不要克隆仓库、不要下载或解压 GitHub 的 Source code (zip/tar.gz)，也不要把安装文件放进我的论文或 PPT 输出目录。
 如需下载文件或写入本机插件配置，请先向我说明并请求确认。不要使用 ExecutionPolicy Bypass。
 
 完成后告诉我实际安装的版本与结果，并提醒我完全重启 Codex。
@@ -90,7 +99,9 @@ https://github.com/jiuBABY6/paper-to-journal-club
 
 ### 🔐 方式 2：浏览器下载 Release 安装器
 
-1. 打开 [Releases 页面](https://github.com/jiuBABY6/paper-to-journal-club/releases)，选择一个固定的正式版本，例如 `v1.0.2`。
+1. 打开 [Releases 页面](https://github.com/jiuBABY6/paper-to-journal-club/releases)，选择一个固定的正式版本，例如 `v1.0.3`。
+
+> ⚠️ 只使用 Releases 页面上**已经显示**的正式标签。源码中的下一个版本号可能尚未发布；若 `v1.0.3` 尚未出现在页面上，请改用该页面实际列出的最新正式版本，绝不要改用 `main`。
 2. 下载同一 Release 中的：
 
    - `paper-to-journal-club-bootstrap.ps1`
@@ -103,12 +114,12 @@ Get-FileHash -LiteralPath ./paper-to-journal-club-bootstrap.ps1 -Algorithm SHA25
 Get-Content -LiteralPath ./paper-to-journal-club-bootstrap.ps1.sha256
 ```
 
-4. 确认两处 SHA-256 一致后运行。以下以 `v1.0.2` 为例；安装新版时只替换标签：
+4. 确认两处 SHA-256 一致后运行。以下以 `v1.0.3` 为例；安装新版时只替换标签：
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File ./paper-to-journal-club-bootstrap.ps1 `
   -RepositoryUrl 'https://github.com/jiuBABY6/paper-to-journal-club' `
-  -ReleaseTag 'v1.0.2'
+  -ReleaseTag 'v1.0.3'
 ```
 
 安装器会再次校验 Marketplace ZIP、检查 PowerPoint，然后验证受信 Codex CLI 并尝试自动安装。发行包缓存目录为：
@@ -126,10 +137,10 @@ powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File ./paper-to-journal
 
 ### ⌨️ 方式 3：用 PowerShell 下载、校验并安装固定版本
 
-下方命令只下载 `v1.0.2` 的正式 Release。将第一行的标签替换为你要安装的正式版本；不要改为 `main`。
+下方命令只下载 `v1.0.3` 的正式 Release。将第一行的标签替换为你要安装的正式版本；不要改为 `main`。
 
 ```powershell
-$tag = 'v1.0.2'
+$tag = 'v1.0.3'
 $downloadDirectory = Join-Path $env:USERPROFILE 'Downloads\Paper-to-Journal-Club'
 $releaseBase = "https://github.com/jiuBABY6/paper-to-journal-club/releases/download/$tag"
 $scriptPath = Join-Path $downloadDirectory 'paper-to-journal-club-bootstrap.ps1'
@@ -179,7 +190,7 @@ powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File ./install.ps1
 1. 将论文 PDF 放在“桌面”“文档”或“下载”目录，再在 Codex 中上传该文件；
 2. 新建任务并粘贴下面的提示词；
 3. 先审阅逐页提纲和证据，再确认生成 PowerPoint；
-4. 打开生成的 PPTX，结合预览图和质量报告做最后核对。
+4. 打开生成的 PPTX，结合返回的质量报告做最后核对；需要逐页 PNG 时再明确要求导出预览。
 
 > 🔒 **文件访问边界：** 为防止恶意论文或提示词诱导插件读取任意本机文件，插件默认只读写“桌面”“文档”“下载”及自身临时目录。若论文或输出必须存放在资料盘，请在**完全退出 Codex 前**将可信资料根写入当前 Windows 用户环境变量，然后重启 Codex：
 >
@@ -193,29 +204,34 @@ powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File ./install.ps1
 >
 > 只填写确实存放论文或输出的窄目录；不要填写 `C:\`、整个用户目录或 `AppData`。如果 Codex 的附件缓存不在默认目录而提示“approved user data directory”，请将论文另存到上述目录或配置资料根，而不是放宽到整个磁盘。
 
+先在 Codex 输入框的 **Plugins** 菜单中明确选择 **Paper to Journal Club**，再发送：
+
 ```text
-[@paper-to-journal-club](plugin://paper-to-journal-club@paper-to-journal-club-tools)
 使用 Paper to Journal Club，将我上传的论文制作成一份 15 分钟中文组会汇报。
+仅使用 Paper to Journal Club 的工具和工作流；不要读取、调用、引用或致谢其它插件。
 必须包括：研究背景、创新点、研究方法、实验数据、局限性和未来研究方向。
 
 先调用 powerpoint_status；先解析论文并输出可核对的逐页提纲。
 每项关键结论都要保留图号、章节、页码或原文证据；不要把模型推断写成论文事实。
 在我确认提纲后，再新建后台 16:9 可编辑 PowerPoint。
-优先使用原生文本、形状、箭头、流程图和表格；仅把无法可靠重绘的原始科研图作为紧裁剪图片插入。
-完成后保存 PPTX，导出预览图，并重新打开文件进行质量审计。
+非封面标题必须使用简短陈述句，不能使用问号、冒号或“实验数据 1”式空标题。按“研究问题与核心结论、背景缺口、创新、研究设计与系统、实验依据、局限、下一步、结论”的顺序组织；每页最多三个支持点。
+默认只从方法/系统结构、主实验结果和消融实验中选择图片；案例分析、失败示例和错误案例默认跳过，除非我明确要求纳入讨论。每张图片或表格都先按完整 Figure/Table 编号定位到论文来源页；若需要页面渲染或裁剪，先生成候选 PNG，再由我确认裁剪区域后才可插入。方法或系统结构图页面必须结合论文方法段或图注，按输入、关键模块、输出和验证做两到四条可回链解释。实验数据页必须展示原始结果图或已确认图表，并只根据论文原文和图注中明确的比较、统计表述说明哪里更优、未改善或无明确差异；原文不明确时要说明不能判断，不得凭截图猜测。
+优先使用原生文本、形状、箭头、流程图和表格。对论文中可可靠对应的实验结果图、消融实验图或系统结构图，直接作为紧裁剪图片插入；若系统图、消融图或实验表格是 PDF 矢量内容，先只渲染其已识别页码为候选 PNG，让我确认裁剪区域后再插入，不能把整页截图自动当作数据表。没有图、图片提取失败，或同页多图而无法可靠对应时，不要猜测，也不要生成图片占位卡。
+默认只保存最终 PPTX；除非我明确要求，否则不要导出 PNG 预览图、不要把 deck-spec JSON 保存到 PPTX 同一目录，也不要复制论文原图。若我要求长期保留实际插入的论文原图，请设置 `export_figure_assets=true`，并固定导出到 `<PPT名>_assets/images`。
+完成后重新打开文件进行质量审计，并在成功时以“感谢使用 Paper to Journal Club 插件，制作者：jiuBABY6。”结束。
 ```
 
-如果第一行插件命令没有被识别，请在 Codex 输入框的插件菜单中选择 **Paper to Journal Club**，再发送后续提示词。
+不要把某个固定 `plugin://...@市场名` 链接当作通用教程：自动安装与个人 Marketplace 回退使用的市场名可能不同，直接从 Plugins 菜单选择最稳妥。
 
 ## 🎬 推荐工作流
 
 1. `powerpoint_status`：确认本机 PowerPoint COM、当前窗口状态和可用能力；
 2. `analyse_paper`：解析论文，得到章节、图号、证据和图片资产；
-3. `design_journal_club_deck`：生成六模块逐页故事线；
-4. 审阅提纲，并在需要时用 `figure_asset_selection` 显式选择已检查过的论文图片；
+3. `design_journal_club_deck`：生成按研究问题、设计、证据、批判和结论排序的逐页故事线；
+4. 只从方法/系统结构、主实验结果和消融实验中选择视觉素材：按完整 Figure/Table 编号定位来源页；同页仅有一个完整 Figure 编号和一张合规图片时，会按 `fig-数字 → parser asset id` 自动绑定，多图、多图片、表格或需要指定 panel 时用 `render_paper_visual` 生成候选页，并在用户确认裁剪后再用 `figure_asset_selection` 显式选择；案例分析和错误案例默认跳过；
 5. `audit_journal_club_deck`：修复所有硬错误；
 6. `generate_editable_pptx`：保存到一个新的 PPTX 路径；
-7. `audit_editable_pptx`：重新打开文件并核对预览图与结构质量。
+7. `audit_editable_pptx`：重新打开文件并核对结构质量；只有需要人工视觉复核时才传 `export_previews=true`。
 
 ## ✏️ 编辑、导出与效果说明
 
@@ -227,6 +243,20 @@ powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File ./install.ps1
 - 原始科研图作为独立图片对象插入。
 
 插件优先保证“可编辑 + 可追溯”，而不是把整页扁平化为图片。复杂显微图、热图或论文原图本身仍可能以图片形式保留；这样可以避免虚构或错误重绘数据含义。
+
+## 🗂️ 为什么输出目录会出现额外文件？
+
+从 `v1.0.3` 起，默认只保存最终 `.pptx`。如果你使用的是早期版本，或在提示词中明确要求了辅助文件，可能看到以下内容：
+
+| 文件或目录 | 含义 | 是否为默认产物 |
+|---|---|---|
+| `组会汇报.pptx` | 最终可编辑 PowerPoint | 是 |
+| `组会汇报.pptx.deck-spec.json` | 逐页提纲与证据引用的可审阅副本 | 否，需显式指定 `deck_spec_output_path` |
+| `组会汇报_previews` | PowerPoint 导出的逐页 PNG | 否，需显式指定 `export_previews=true` |
+| `组会汇报_assets/images` | 本次实际插入 PPT 的论文原始 PNG/JPEG 副本 | 否，需显式指定 `export_figure_assets=true`；没有插图时不会创建空目录 |
+| `paper-to-journal-club-v1.0.2` | 外层安装任务下载的 Release 资产暂存目录 | 不是 PPT 生成器产物，也不是运行所需源码 |
+
+最后一项不应出现在论文或 PPT 输出目录。它不是最终成品，也不是插件运行所需的正确安装位置：正式安装器把发行包缓存到 `%LOCALAPPDATA%\Codex\marketplaces\paper-to-journal-club\current`，个人 Marketplace 回退则部署到 `%USERPROFILE%\.codex\plugins\paper-to-journal-club`。本机必须保存一份运行时文件，才能在你的电脑上控制 PowerPoint；但不需要把 GitHub 源码副本留在项目目录。
 
 ## ⚠️ 重要限制
 
